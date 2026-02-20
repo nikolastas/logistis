@@ -1,0 +1,16 @@
+{
+  "name": "couple-finance",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm -r run build",
+    "db:migrate": "pnpm --filter api db:migrate",
+    "db:seed": "pnpm --filter api db:seed",
+    "db:clean": "pnpm --filter api db:clean"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -103,12 +103,58 @@ couple-finance/
 
 ---
 
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm (`npm install -g pnpm`) — or use `npx pnpm` for all commands
+- Docker (for PostgreSQL)
+
+### Setup
+
+1. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+
+2. **Start PostgreSQL**
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Configure environment**
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` if needed. Default `DATABASE_URL` works with Docker. Add `OPENAI_API_KEY` for AI categorization.
+
+4. **Seed categories**
+   ```bash
+   pnpm db:seed
+   ```
+
+5. **Run development servers**
+   ```bash
+   pnpm dev
+   ```
+   - API: http://localhost:3001
+   - Web: http://localhost:5173
+
+### Build
+
+```bash
+pnpm build
+```
+
+---
+
 ## 🏦 Supported Banks
 
 | Bank | Format | Encoding | Notes |
 |------|--------|----------|-------|
 | Alpha Bank | CSV (`;` delimited) | Windows-1253 | Separate debit/credit columns |
-| NBG | CSV (tab delimited) | UTF-8 | Separate debit/credit columns |
+| NBG | CSV (tab) or XLSX | UTF-8 | Separate debit/credit; XLSX has Greek column headers |
 | Winbank (Piraeus) | CSV (`,` delimited) | UTF-8 | Single signed amount column |
 | Revolut | CSV (`,` delimited) | UTF-8 | ISO dates, includes fees |
 
@@ -130,14 +176,14 @@ extended at any time. The categorizer pipeline runs:
 
 1. Exact keyword match (normalized, accent-stripped)
 2. Fuzzy match on description
-3. AI fallback via Claude API
+3. AI fallback via OpenAI API (optional, set `OPENAI_API_KEY`)
 4. Manual fallback → `Uncategorized`
 
 ---
 
 ## 🚧 Roadmap
 
-- [ ] PDF statement parsing
+- [x] PDF statement parsing (generic)
 - [ ] Mobile-friendly UI
 - [ ] Budget alerts (email / push)
 - [ ] Multi-currency support (Revolut)
