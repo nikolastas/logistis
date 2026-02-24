@@ -1,0 +1,190 @@
+{
+  "Cash": {
+    "ATM": ["ΑΤΜ-ΑΝΑΛΗΨΗ ΜΕΤΡΗΤΩΝ"]
+  },
+  "Cashback": {},
+  "Credit": {},
+  "Donations": {},
+  "Entertainment": {
+    "Streaming": [
+      "netflix",
+      "primetrust",
+      "spotify",
+      "amznprimetr",
+      "Tidal Music"
+    ],
+    "Movies": ["Village"]
+  },
+  "Food": {
+    "Delivery": ["efood", "ΕΦΟΟΔ", "box", "Wolt"],
+    "Restaurants & Cafes": [
+      "CHRYSOVALANTIS BATSO ZOGRAFOU",
+      "TAF",
+      "PAVO EE CHALANDRI",
+      "COFFEE ACADEMY OE ARGIROUPOLI",
+      "OPISTHODROMIKES",
+      "ASYMMETRO ATHINA",
+      "KOUTSOGKILAS ATHAN ZOGRAFOS",
+      "OPUS",
+      "SAMARAS V KAI SIA OE GLYFADA",
+      "Mcdonald",
+      "ΜΑΙΛΟΣ",
+      "PAYPAL ONLINEDELIV",
+      "SHAKESBEER",
+      "Eurocoffee",
+      "Mythos Zan Moreas",
+      "Coffee Academy",
+      "Yasouvlaki",
+      "MYTHOS ZAN MOREAS",
+      "HANDPICKERS",
+      "JERRY S HOUSE",
+      "TOURKANTONI",
+      "GOUDI RESTO SINGLE",
+      "Blysscafe",
+      "Antheon Tyropita Santouits",
+      "SAMARAS V KAI SIA OE",
+      "EMM MOUTSOS",
+      "K TSAKONITIS AND SIA E",
+      "Starbucks",
+      "SAM BURGERS POS",
+      "Stamou Athanasia",
+      "LIDO",
+      "MACONDO PROJECT",
+      "O KOSTAS SIARKOS",
+      "HUNTERS RESTAURANT",
+      "PICASSO ATHENS",
+      "PAPAYA BAR",
+      "MAIMOU OE",
+      "UMAMI 7A",
+      "PSITOPOLEIO ESTIATORIO",
+      "ZACHAROPLASTEIO KOSMIK",
+      "OVEN",
+      "1948",
+      "FRED EE",
+      "LOT 51",
+      "CAFE BREAK E E ",
+      "NAIF ATHENS",
+      "CHARLIE DOS",
+      "RUMORS"
+    ]
+  },
+  "General Gift": {},
+  "Groceries": {
+    "Supermarket": [
+      "AB_ELLINIKO ELLINIKO",
+      "lidl",
+      "SKLAVENITIS",
+      "AB VASILOPOULOS",
+      "AB SHOP  GO",
+      "MY MARKET",
+      "THE MART",
+      "KRITIKOS"
+    ]
+  },
+  "Health": {
+    "Pharmacy": ["FARMAKEIO "],
+    "Medical Services": ["Semertzaki Olga", "HEALTH SPOT"],
+    "Medical Supplies": ["OPTOLIFE"]
+  },
+  "Insurance": {},
+  "Investment": {
+    "Brokerage": ["freedom"],
+    "Bank Fees": ["ΕΝΤΟΛΗ/ΕΜΒΑΣΜΑ ΣΕ ΑΛΛΗ ΤΡΑΠΕΖΑ 22 ΕΚΔΟΣΗ ΕΝΤΟΛΗΣ"]
+  },
+  "Loan": {},
+  "Savings": {},
+  "Services": {
+    "Subscriptions": ["Todoist", "LeetCode"]
+  },
+  "Shopping": {
+    "Online Marketplace": ["SKROUTZ", "amazon"],
+    "Payment Services": ["Klarna", "EVERYPAY"],
+    "Clothing & Fashion": [
+      "NIKE",
+      "FUNKY BUDDHA",
+      "COSMOSSPORT",
+      "AMERICAN EAGLE",
+      "asos.com",
+      "ASOS",
+      "Abercrombie",
+      "Americaneag",
+      "MASSIMO DUTTI",
+      "massimodutticom",
+      "MARKS SPENCER",
+      "zara",
+      "HM",
+      "BUZZ CLYFADA",
+      "MARKS  SPENCER"
+    ],
+    "Electronics": ["ISTORM"],
+    "Sports": ["DECATHLON GREECE"],
+    "Furniture": ["IKEA"],
+    "Seasonal": ["ntalaperas"]
+  },
+  "Tech": {
+    "Software": ["PADDLE.NET"]
+  },
+  "Trading": {},
+  "Transport": {
+    "Gas": ["BP", "shell", " Elin_madesi_alimos", "ERMIS 497"],
+    "Other": ["DIMCOGLYFADA"],
+    "Parking": ["The Mall Athens", "DAEM SA", "ATHENS INTL AIRPORT"],
+    "Taxi": ["UBR PENDINGUBERCOM", "BOLT"],
+    "CarServices": ["TOYOTA GIANNITSAS", "ΒΚΜ1203"]
+  },
+  "Travel": {
+    "Accommodation": ["booking"],
+    "Food & Drink": [
+      "ROMA",
+      "CARD_PAYMENT M & M San Giorgio Sas",
+      " Borghiciana",
+      "Sant'eustachio Il Caff",
+      "Ristorante Le Felizian"
+    ],
+    "Groceries": [
+      "Supermercato Carrefour",
+      "Crf Gs S.p.a",
+      " Carrefour Express"
+    ],
+    "Health": ["Enorfarm"],
+    "Transport": [
+      "Meb-Ottaviano-412",
+      "Atac",
+      "NEA ODOS",
+      "ATTIKI ODOS SA",
+      "OLYMPIA ODOS",
+      "FERRYHOPPER"
+    ]
+  },
+  "Utilities": {
+    "Telecom": ["COSMOTE"],
+    "Personal Care": ["CACTUS BARBERSHOP", "ntzinis"],
+    "Documents": ["PARABOLO 1125"]
+  },
+  "Transfers": {
+    "Outgoing": ["TRANSFER To"],
+    "Bank Fees": ["ΑΝΑΝΕΩΣΗ ΧΡΕΩΣΤΙΚΗΣ ΚΑΡΤΑΣ"]
+  },
+  "Μισθος": {
+    "Salary": ["Μισθος", "ΜΙΣΘΟΔΟΣΙΑ"],
+    "Other Income": [
+      "ΣΚΡΟΥΤΖ ΥΠΗΡΕΣΙΕΣ ΔΙΑΝΟΜΗΣ",
+      "ΕΙΔΙΚΟΣ ΛΟΓΑΡΙΑΣΜΟΣ ΚΟΝΔΥΛΙΩ",
+      "EMP\nEMP"
+    ],
+    "ATM": ["Κατάθεση σε ΑΤΜ ΕΤΕ"]
+  },
+  "Refunds": {
+    "General": ["TOPUP Payment from Paypal Europe Sarl Et Cie Sca"]
+  },
+  "TransfersS": {
+    "Incoming": ["TRANSFER From"]
+  },
+  "Euro from others": {
+    "Rewards": ["REWARD Referral promotion"],
+    "Exchange": ["EXCHANGE Revolut Ltd"]
+  },
+  "Gamble": {
+    "Betting": ["Stoiximan"]
+  }
+}

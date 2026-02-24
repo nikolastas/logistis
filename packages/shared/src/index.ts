@@ -4,3 +4,4 @@ export * from "./types/goal";
 export * from "./types/household";
 export * from "./types/user";
 export * from "./types/income";
+export * from "./types/budget";

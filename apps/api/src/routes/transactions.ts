@@ -7,20 +7,21 @@ export const transactionsRouter = Router();
 
 transactionsRouter.get("/", async (req, res) => {
   try {
-    const { from, to, category, owner, ownerId, householdId, description, amountMin, amountMax, transferType } =
+    const { from, to, category, userId, householdId, description, amountMin, amountMax, transferType } =
       req.query;
     const qb = dataSource.getRepository(Transaction).createQueryBuilder("t");
 
     if (from) qb.andWhere("t.date >= :from", { from });
     if (to) qb.andWhere("t.date <= :to", { to });
     if (category) qb.andWhere("t.categoryId = :category", { category });
-    if (ownerId) qb.andWhere("t.ownerId = :ownerId", { ownerId });
-    else if (owner) qb.andWhere("t.owner = :owner", { owner });
+    if (userId === "__shared__" || userId === "shared") {
+      qb.andWhere("t.userId IS NULL");
+    } else if (userId) {
+      qb.andWhere("t.userId = :userId", { userId });
+    }
     if (householdId) qb.andWhere("(t.householdId = :householdId OR t.householdId IS NULL)", { householdId });
     if (transferType === "transfers") {
-      qb.andWhere(
-        "t.transferType IN ('own_account', 'household_member', 'third_party')"
-      );
+      qb.andWhere("t.categoryId LIKE 'transfer/%'");
     }
     if (description && String(description).trim()) {
       qb.andWhere("t.description ILIKE :description", {
@@ -45,15 +46,31 @@ transactionsRouter.get("/", async (req, res) => {
   }
 });
 
+transactionsRouter.delete("/bulk", async (req, res) => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+    if (!ids?.length) {
+      res.status(400).json({ error: "ids array required" });
+      return;
+    }
+
+    const repo = dataSource.getRepository(Transaction);
+    const result = await repo.delete({ id: In(ids) });
+
+    res.json({ deleted: result.affected ?? ids.length });
+  } catch (err) {
+    console.error("Bulk delete:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Bulk delete failed" });
+  }
+});
+
 transactionsRouter.patch("/bulk", async (req, res) => {
   try {
-    const { ids, categoryId, ownerId, splitRatio, transferType, isExcludedFromAnalytics, countAsExpense } =
+    const { ids, categoryId, userId, isExcludedFromAnalytics, countAsExpense } =
       req.body as {
         ids: string[];
         categoryId?: string;
-        ownerId?: string | null;
-        splitRatio?: Record<string, number>;
-        transferType?: string | null;
+        userId?: string | null;
         isExcludedFromAnalytics?: boolean;
         countAsExpense?: boolean;
       };
@@ -64,8 +81,10 @@ transactionsRouter.patch("/bulk", async (req, res) => {
 
     const repo = dataSource.getRepository(Transaction);
     const txList = await repo.find({ where: { id: In(ids) } });
-    if (ownerId !== undefined || (splitRatio && Object.keys(splitRatio).length > 0)) {
-      const excluded = txList.filter((t) => t.isExcludedFromAnalytics && t.transferType === "own_account");
+    if (userId !== undefined) {
+      const excluded = txList.filter(
+        (t) => t.isExcludedFromAnalytics && t.categoryId === "transfer/own-account"
+      );
       if (excluded.length > 0) {
         res.status(400).json({ error: "Own-account transfers cannot be tagged to a user." });
         return;
@@ -74,26 +93,19 @@ transactionsRouter.patch("/bulk", async (req, res) => {
 
     const updates: Partial<{
       categoryId: string;
-      ownerId: string | null;
-      splitRatio: Record<string, number> | null;
-      transferType: "none" | "own_account" | "household_member" | "third_party" | null;
+      userId: string | null;
       isExcludedFromAnalytics: boolean;
       countAsExpense: boolean;
     }> = {};
     if (categoryId != null) updates.categoryId = categoryId;
-    if (ownerId !== undefined) updates.ownerId = ownerId;
-    if (splitRatio != null && typeof splitRatio === "object") {
-      const sum = Object.values(splitRatio).reduce((a: number, b: unknown) => a + Number(b), 0);
-      if (Math.abs(sum - 1) < 0.001) updates.splitRatio = splitRatio;
-    }
-    if (transferType !== undefined) updates.transferType = transferType as "none" | "own_account" | "household_member" | "third_party" | null;
+    if (userId !== undefined) updates.userId = userId;
     if (isExcludedFromAnalytics !== undefined) updates.isExcludedFromAnalytics = isExcludedFromAnalytics;
     if (countAsExpense !== undefined) updates.countAsExpense = countAsExpense;
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({
         error:
-          "At least one of categoryId, ownerId, splitRatio, transferType, isExcludedFromAnalytics, countAsExpense required",
+          "At least one of categoryId, userId, isExcludedFromAnalytics, countAsExpense required",
       });
       return;
     }
@@ -115,7 +127,7 @@ transactionsRouter.patch("/bulk", async (req, res) => {
 transactionsRouter.patch("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { categoryId, ownerId, splitRatio, transferType, transferCounterparty, transferCounterpartyUserId, isExcludedFromAnalytics, countAsExpense } =
+    const { categoryId, userId, transferCounterpartyUserId, isExcludedFromAnalytics, countAsExpense } =
       req.body;
 
     const repo = dataSource.getRepository(Transaction);
@@ -125,19 +137,13 @@ transactionsRouter.patch("/:id", async (req, res) => {
       return;
     }
 
-    if ((ownerId !== undefined || (splitRatio && Object.keys(splitRatio).length > 0)) && t.isExcludedFromAnalytics && t.transferType === "own_account") {
+    if (userId !== undefined && t.isExcludedFromAnalytics && t.categoryId === "transfer/own-account") {
       res.status(400).json({ error: "Own-account transfers cannot be tagged to a user." });
       return;
     }
 
     if (categoryId != null) t.categoryId = categoryId;
-    if (ownerId !== undefined) t.ownerId = ownerId;
-    if (splitRatio != null && typeof splitRatio === "object") {
-      const sum = Object.values(splitRatio).reduce((a: number, b: unknown) => a + Number(b), 0);
-      if (Math.abs(sum - 1) < 0.001) t.splitRatio = splitRatio;
-    }
-    if (transferType !== undefined) t.transferType = transferType;
-    if (transferCounterparty !== undefined) t.transferCounterparty = transferCounterparty;
+    if (userId !== undefined) t.userId = userId;
     if (transferCounterpartyUserId !== undefined) t.transferCounterpartyUserId = transferCounterpartyUserId;
     if (isExcludedFromAnalytics !== undefined) t.isExcludedFromAnalytics = isExcludedFromAnalytics;
     if (countAsExpense !== undefined) t.countAsExpense = countAsExpense;

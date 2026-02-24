@@ -24,8 +24,8 @@ export function HouseholdGate() {
   const queryClient = useQueryClient();
   const [createName, setCreateName] = useState("");
   const [newUserNickname, setNewUserNickname] = useState("");
-  const [newUserLegalEl, setNewUserLegalEl] = useState("");
-  const [newUserLegalEn, setNewUserLegalEn] = useState("");
+  const [newUserAliases, setNewUserAliases] = useState<string[]>([]);
+  const [newUserAliasInput, setNewUserAliasInput] = useState("");
   const [newUserColor, setNewUserColor] = useState(PRESET_COLORS[0]);
   const [pendingHouseholdId, setPendingHouseholdId] = useState<string | null>(null);
 
@@ -51,8 +51,8 @@ export function HouseholdGate() {
         await selectHousehold(hid);
         setPendingHouseholdId(null);
         setNewUserNickname("");
-        setNewUserLegalEl("");
-        setNewUserLegalEn("");
+        setNewUserAliases([]);
+        setNewUserAliasInput("");
         setNewUserColor(PRESET_COLORS[0]);
       }
       queryClient.invalidateQueries({ queryKey: ["households"] });
@@ -67,14 +67,12 @@ export function HouseholdGate() {
 
   const handleAddFirstUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pendingHouseholdId || !newUserNickname.trim() || !newUserLegalEl.trim() || !newUserLegalEn.trim())
-      return;
+    if (!pendingHouseholdId || !newUserNickname.trim() || newUserAliases.length === 0) return;
     createUserMutation.mutate({
       hid: pendingHouseholdId,
       data: {
         nickname: newUserNickname.trim(),
-        legalNameEl: newUserLegalEl.trim(),
-        legalNameEn: newUserLegalEn.trim(),
+        nameAliases: newUserAliases,
         color: newUserColor,
       },
     });
@@ -137,29 +135,65 @@ export function HouseholdGate() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Legal name (Greek)
+                  Name aliases (for transfer matching)
                 </label>
-                <input
-                  type="text"
-                  value={newUserLegalEl}
-                  onChange={(e) => setNewUserLegalEl(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
-                  placeholder="e.g. ΝΙΚΟΛΑΟΣ ΠΑΠΑΔΟΠΟΥΛΟΣ"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Legal name (English)
-                </label>
-                <input
-                  type="text"
-                  value={newUserLegalEn}
-                  onChange={(e) => setNewUserLegalEn(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
-                  placeholder="e.g. NIKOLAOS PAPADOPOULOS"
-                  required
-                />
+                <p className="text-xs text-slate-500 mb-2">
+                  Add full names as they appear on bank statements
+                </p>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newUserAliasInput}
+                    onChange={(e) => setNewUserAliasInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const v = newUserAliasInput.trim();
+                        if (v && !newUserAliases.includes(v))
+                          setNewUserAliases([...newUserAliases, v]);
+                        setNewUserAliasInput("");
+                      }
+                    }}
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
+                    placeholder="e.g. NIKOLAOS PAPADOPOULOS"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = newUserAliasInput.trim();
+                      if (v && !newUserAliases.includes(v))
+                        setNewUserAliases([...newUserAliases, v]);
+                      setNewUserAliasInput("");
+                    }}
+                    className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50"
+                  >
+                    Add
+                  </button>
+                </div>
+                {newUserAliases.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {newUserAliases.map((a) => (
+                      <span
+                        key={a}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-sm"
+                      >
+                        {a}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewUserAliases(newUserAliases.filter((x) => x !== a))
+                          }
+                          className="text-slate-500 hover:text-red-600"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {newUserAliases.length === 0 && (
+                  <p className="text-xs text-amber-600">At least one alias required</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -183,7 +217,7 @@ export function HouseholdGate() {
               </div>
               <button
                 type="submit"
-                disabled={createUserMutation.isPending}
+                disabled={createUserMutation.isPending || newUserAliases.length === 0}
                 className="w-full py-2 rounded-lg bg-slate-800 text-white font-medium hover:bg-slate-700 disabled:opacity-50"
               >
                 {createUserMutation.isPending ? "Adding..." : "Add user & continue"}

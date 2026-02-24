@@ -5,6 +5,7 @@ import { Review } from "./pages/Review";
 import { Dashboard } from "./pages/Dashboard";
 import { Goals } from "./pages/Goals";
 import { Settings } from "./pages/Settings";
+import { Budget } from "./pages/Budget";
 
 function Nav() {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -26,6 +27,9 @@ function Nav() {
       <NavLink to="/goals" className={linkClass}>
         Goals
       </NavLink>
+      <NavLink to="/budget" className={linkClass}>
+        Budget
+      </NavLink>
       <NavLink to="/settings" className={linkClass}>
         <SettingsIcon className="w-4 h-4 inline-block mr-1.5 align-middle" />
         Settings
@@ -44,6 +48,7 @@ export default function App() {
           <Route path="/upload" element={<Upload />} />
           <Route path="/review" element={<Review />} />
           <Route path="/goals" element={<Goals />} />
+          <Route path="/budget" element={<Budget />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

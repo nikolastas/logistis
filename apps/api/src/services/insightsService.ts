@@ -1,6 +1,7 @@
 import { dataSource } from "../db";
 import { Transaction } from "../entities/Transaction";
 import { isExcludedFromSpending } from "../categorizer";
+import { getSharedExpenseSplit } from "./incomeService";
 
 export interface SpendingByCategory {
   categoryId: string;
@@ -11,7 +12,7 @@ export interface SpendingByCategory {
 
 export interface SpendingByOwner {
   owner: string;
-  ownerId?: string | null;
+  userId?: string | null;
   total: number;
   count: number;
 }
@@ -31,7 +32,9 @@ export interface SavingsSuggestion {
 
 export async function getSpendingByCategory(
   from?: string,
-  to?: string
+  to?: string,
+  householdId?: string,
+  userId?: string | null
 ): Promise<SpendingByCategory[]> {
   const qb = dataSource
     .getRepository(Transaction)
@@ -42,11 +45,19 @@ export async function getSpendingByCategory(
     .where("t.amount != 0")
     .andWhere("(t.isExcludedFromAnalytics = false OR t.isExcludedFromAnalytics IS NULL)")
     .andWhere(
-      "(t.transferType IS NULL OR t.transferType = 'none' OR (t.transferType = 'third_party' AND t.countAsExpense = true))"
+      "(t.categoryId NOT LIKE 'transfer/%' OR (t.categoryId IN ('transfer/to-third-party','transfer/from-third-party') AND t.countAsExpense = true))"
     );
 
   if (from) qb.andWhere("t.date >= :from", { from });
   if (to) qb.andWhere("t.date <= :to", { to });
+  if (householdId) qb.andWhere("t.householdId = :hid", { hid: householdId });
+  if (userId !== undefined && userId !== null && userId !== "") {
+    if (userId === "__shared__") {
+      qb.andWhere("t.userId IS NULL");
+    } else {
+      qb.andWhere("t.userId = :uid", { uid: userId });
+    }
+  }
 
   const rows = await qb.groupBy("t.categoryId").getRawMany();
   return rows
@@ -61,88 +72,98 @@ export async function getSpendingByCategory(
 export async function getSpendingByOwner(
   from?: string,
   to?: string,
-  householdId?: string
+  householdId?: string,
+  filterUserId?: string | null
 ): Promise<SpendingByOwner[]> {
   if (householdId) {
-    return getSpendingByOwnerWithSplit(from, to, householdId);
+    const rows = await getSpendingByOwnerWithSplit(from, to, householdId, filterUserId);
+    if (filterUserId && filterUserId !== "__shared__") {
+      return rows.filter((r) => r.userId === filterUserId);
+    }
+    return rows;
   }
   const qb = dataSource
     .getRepository(Transaction)
     .createQueryBuilder("t")
-    .select("COALESCE(t.ownerId::text, COALESCE(t.owner, 'shared'))", "owner")
-    .addSelect("t.ownerId", "ownerId")
+    .select("COALESCE(t.userId::text, 'shared')", "owner")
+    .addSelect("t.userId", "userId")
     .addSelect("SUM(CASE WHEN t.amount < 0 THEN t.amount ELSE 0 END)", "total")
     .addSelect("SUM(CASE WHEN t.amount < 0 THEN 1 ELSE 0 END)", "count")
     .where("t.amount != 0")
     .andWhere("(t.isExcludedFromAnalytics = false OR t.isExcludedFromAnalytics IS NULL)")
     .andWhere(
-      "(t.transferType IS NULL OR t.transferType = 'none' OR (t.transferType = 'third_party' AND t.countAsExpense = true))"
+      "(t.categoryId NOT LIKE 'transfer/%' OR (t.categoryId IN ('transfer/to-third-party','transfer/from-third-party') AND t.countAsExpense = true))"
     );
 
   if (from) qb.andWhere("t.date >= :from", { from });
   if (to) qb.andWhere("t.date <= :to", { to });
 
-  const rows = await qb.groupBy("t.ownerId").addGroupBy("t.owner").getRawMany();
+  const rows = await qb.groupBy("t.userId").getRawMany();
   return rows
     .map((r) => ({
       owner: r.owner ?? "shared",
-      ownerId: r.ownerId,
+      userId: r.userId,
       total: parseFloat(r.total) || 0,
       count: parseInt(r.count, 10) || 0,
     }))
     .filter((r) => r.total < 0);
 }
 
-/** Spending per user using splitRatio; for household view */
+/** Spending per user; for household view. Shared txns (userId null) use getSharedExpenseSplit. */
 async function getSpendingByOwnerWithSplit(
   from?: string,
   to?: string,
-  householdId?: string
+  householdId?: string,
+  filterUserId?: string | null
 ): Promise<SpendingByOwner[]> {
   const { User } = await import("../entities/User");
   const users = await dataSource.getRepository(User).find({ where: { householdId: householdId! } });
   const userIds = users.map((u) => u.id);
+  const sharedSplit = await getSharedExpenseSplit(householdId!);
 
   const qb = dataSource
     .getRepository(Transaction)
     .createQueryBuilder("t")
     .select("t.id", "id")
     .addSelect("t.amount", "amount")
-    .addSelect("t.splitRatio", "splitRatio")
-    .addSelect("t.ownerId", "ownerId")
+    .addSelect("t.userId", "userId")
     .where("t.amount < 0")
     .andWhere("(t.householdId = :hid OR t.householdId IS NULL)", { hid: householdId })
     .andWhere("(t.isExcludedFromAnalytics = false OR t.isExcludedFromAnalytics IS NULL)")
     .andWhere(
-      "(t.transferType IS NULL OR t.transferType = 'none' OR (t.transferType = 'third_party' AND t.countAsExpense = true))"
+      "(t.categoryId NOT LIKE 'transfer/%' OR (t.categoryId IN ('transfer/to-third-party','transfer/from-third-party') AND t.countAsExpense = true))"
     );
 
   if (from) qb.andWhere("t.date >= :from", { from });
   if (to) qb.andWhere("t.date <= :to", { to });
+  if (filterUserId === "__shared__") {
+    qb.andWhere("t.userId IS NULL");
+  } else if (filterUserId && filterUserId !== "__shared__") {
+    qb.andWhere("t.userId = :uid", { uid: filterUserId });
+  }
 
   const rows = await qb.getRawMany();
+
+  if (filterUserId === "__shared__") {
+    const total = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+    return total < 0 ? [{ owner: "Shared", userId: null, total, count: rows.length }] : [];
+  }
+
   const byUser: Record<string, { total: number; count: number }> = {};
   for (const uid of userIds) byUser[uid] = { total: 0, count: 0 };
 
   for (const r of rows) {
     const amount = parseFloat(r.amount) || 0;
-    const split = (r.splitRatio as Record<string, number>) || {};
-    for (const uid of userIds) {
-      const pct = Number(split[uid]) || 0;
-      if (pct > 0) {
-        byUser[uid].total += amount * pct;
-        byUser[uid].count += 1;
-      }
-    }
-    if (Object.keys(split).length === 0) {
-      const ownerId = r.ownerId;
-      if (ownerId && byUser[ownerId]) {
-        byUser[ownerId].total += amount;
-        byUser[ownerId].count += 1;
-      } else {
-        const n = userIds.length;
-        for (const uid of userIds) {
-          byUser[uid].total += amount / n;
+    const txnUserId = r.userId as string | null;
+    if (txnUserId && byUser[txnUserId]) {
+      byUser[txnUserId].total += amount;
+      byUser[txnUserId].count += 1;
+    } else {
+      const split = Object.keys(sharedSplit).length > 0 ? sharedSplit : Object.fromEntries(userIds.map((uid) => [uid, 1 / userIds.length]));
+      for (const uid of userIds) {
+        const pct = split[uid] ?? 0;
+        if (pct > 0) {
+          byUser[uid].total += amount * pct;
           byUser[uid].count += 1;
         }
       }
@@ -151,15 +172,73 @@ async function getSpendingByOwnerWithSplit(
 
   return userIds.map((uid) => ({
     owner: users.find((u) => u.id === uid)?.nickname ?? uid,
-    ownerId: uid,
+    userId: uid,
     total: byUser[uid].total,
     count: byUser[uid].count,
   })).filter((r) => r.total < 0);
 }
 
+export interface SpendingByMonthCategory {
+  month: string;
+  categoryId: string;
+  categoryName?: string;
+  total: number;
+}
+
+export async function getSpendingByMonthAndCategory(
+  year: number,
+  householdId?: string,
+  userId?: string | null
+): Promise<SpendingByMonthCategory[]> {
+  const from = `${year}-01-01`;
+  const to = `${year}-12-31`;
+
+  const qb = dataSource
+    .getRepository(Transaction)
+    .createQueryBuilder("t")
+    .select("SUBSTRING(t.date::text, 1, 7)", "month")
+    .addSelect("t.categoryId", "categoryId")
+    .addSelect("SUM(CASE WHEN t.amount < 0 THEN t.amount ELSE 0 END)", "total")
+    .where("t.amount != 0")
+    .andWhere("t.date >= :from", { from })
+    .andWhere("t.date <= :to", { to })
+    .andWhere("(t.isExcludedFromAnalytics = false OR t.isExcludedFromAnalytics IS NULL)")
+    .andWhere(
+      "(t.categoryId NOT LIKE 'transfer/%' OR (t.categoryId IN ('transfer/to-third-party','transfer/from-third-party') AND t.countAsExpense = true))"
+    );
+
+  if (householdId) {
+    qb.andWhere("t.householdId = :hid", { hid: householdId });
+  }
+  if (userId !== undefined && userId !== null && userId !== "") {
+    if (userId === "__shared__") {
+      qb.andWhere("t.userId IS NULL");
+    } else {
+      qb.andWhere("t.userId = :uid", { uid: userId });
+    }
+  }
+
+  const rows = await qb
+    .groupBy("SUBSTRING(t.date::text, 1, 7)")
+    .addGroupBy("t.categoryId")
+    .orderBy("month")
+    .addOrderBy("t.categoryId")
+    .getRawMany();
+
+  return rows
+    .map((r) => ({
+      month: r.month,
+      categoryId: r.categoryId,
+      total: parseFloat(r.total) || 0,
+    }))
+    .filter((r) => r.total < 0 && !isExcludedFromSpending(r.categoryId));
+}
+
 export async function getSpendingByMonth(
   from?: string,
-  to?: string
+  to?: string,
+  householdId?: string,
+  userId?: string | null
 ): Promise<SpendingByMonth[]> {
   const qb = dataSource
     .getRepository(Transaction)
@@ -170,11 +249,19 @@ export async function getSpendingByMonth(
     .where("t.amount != 0")
     .andWhere("(t.isExcludedFromAnalytics = false OR t.isExcludedFromAnalytics IS NULL)")
     .andWhere(
-      "(t.transferType IS NULL OR t.transferType = 'none' OR (t.transferType = 'third_party' AND t.countAsExpense = true))"
+      "(t.categoryId NOT LIKE 'transfer/%' OR (t.categoryId IN ('transfer/to-third-party','transfer/from-third-party') AND t.countAsExpense = true))"
     );
 
   if (from) qb.andWhere("t.date >= :from", { from });
   if (to) qb.andWhere("t.date <= :to", { to });
+  if (householdId) qb.andWhere("t.householdId = :hid", { hid: householdId });
+  if (userId !== undefined && userId !== null && userId !== "") {
+    if (userId === "__shared__") {
+      qb.andWhere("t.userId IS NULL");
+    } else {
+      qb.andWhere("t.userId = :uid", { uid: userId });
+    }
+  }
 
   const rows = await qb.groupBy("SUBSTRING(t.date::text, 1, 7)").orderBy("month").getRawMany();
   return rows
@@ -225,23 +312,23 @@ export async function getTransfersInsight(
       "unlinked"
     )
     .where("t.householdId = :hid", { hid: householdId })
-    .andWhere("t.transferType = 'own_account'")
+    .andWhere("t.categoryId = 'transfer/own-account'")
     .andWhere("t.date >= :from", { from: monthStart })
     .andWhere("t.date <= :to", { to: monthEnd })
     .getRawOne();
 
   const householdMemberRows = await repo
     .createQueryBuilder("t")
-    .select("t.ownerId", "fromUserId")
+    .select("t.userId", "fromUserId")
     .addSelect("t.transferCounterpartyUserId", "toUserId")
     .addSelect("COUNT(*)", "count")
     .addSelect("SUM(t.amount)", "totalAmount")
     .where("t.householdId = :hid", { hid: householdId })
-    .andWhere("t.transferType = 'household_member'")
+    .andWhere("t.categoryId IN ('transfer/to-household-member','transfer/from-household-member')")
     .andWhere("t.date >= :from", { from: monthStart })
     .andWhere("t.date <= :to", { to: monthEnd })
     .andWhere("t.amount != 0")
-    .groupBy("t.ownerId")
+    .groupBy("t.userId")
     .addGroupBy("t.transferCounterpartyUserId")
     .getRawMany();
 
@@ -264,7 +351,7 @@ export async function getTransfersInsight(
       "inTotal"
     )
     .where("t.householdId = :hid", { hid: householdId })
-    .andWhere("t.transferType = 'third_party'")
+    .andWhere("t.categoryId IN ('transfer/to-third-party','transfer/from-third-party','transfer/to-external-member','transfer/from-external-member')")
     .andWhere("t.date >= :from", { from: monthStart })
     .andWhere("t.date <= :to", { to: monthEnd })
     .getRawOne();

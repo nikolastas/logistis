@@ -32,6 +32,9 @@ const THIRD_PARTY_KEYWORDS = [
 const ALPHA_OWN_ACCOUNT = ["ΕΜΒΑΣΜΑ ΙΔΙΟΚΤΗΤΗ"];
 const ALPHA_THIRD_PARTY = ["ΕΜΒΑΣΜΑ ΤΡΙΤΟΥ"];
 
+/** Payzy top-up from bank/card (e.g. NGB, Revolut) – own-account transfer */
+const PAYZY_OWN_ACCOUNT = ["PAYZY BY COSMOTE"];
+
 export type TransferClassification = {
   transferType: "none" | "own_account" | "household_member" | "third_party";
   transferCounterparty: string | null;
@@ -49,23 +52,6 @@ function normalize(str: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const d: number[][] = Array(m + 1)
-    .fill(null)
-    .map(() => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) d[i][0] = i;
-  for (let j = 0; j <= n; j++) d[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
-    }
-  }
-  return d[m][n];
-}
-
 function extractCounterparty(description: string, keyword: string): string {
   const norm = normalize(description);
   const kwNorm = normalize(keyword);
@@ -79,35 +65,87 @@ function extractCounterparty(description: string, keyword: string): string {
   return after.slice(0, end > 0 ? end : 50).trim();
 }
 
-function matchHouseholdMember(
+/** Normalize for exact alias match: uppercase, trim, collapse spaces. Exported for use in upload flow. */
+export function aliasNormalize(str: string): string {
+  return str
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+/** Match counterparty string against user nameAliases. Exact match only (case-insensitive). */
+export function matchUserByAlias(
   extracted: string,
   users: User[]
 ): { userId: string; rawName: string } | null {
-  if (!extracted || extracted.length < 2) return null;
-  const extNorm = normalize(extracted);
+  if (!extracted || extracted.trim().length < 2) return null;
+  const extNorm = aliasNormalize(extracted);
+  const aliases = (u: User) => (u.nameAliases ?? []) as string[];
   for (const u of users) {
-    const el = normalize(u.legalNameEl);
-    const en = normalize(u.legalNameEn);
-    const partsEl = el.split(/\s+/).filter(Boolean);
-    const partsEn = en.split(/\s+/).filter(Boolean);
-    for (const part of [...partsEl, ...partsEn]) {
-      if (part.length < 3) continue;
-      if (levenshtein(extNorm, part) <= 2 || extNorm.includes(part) || part.includes(extNorm)) {
-        return { userId: u.id, rawName: extracted };
-      }
-    }
-    if (levenshtein(extNorm, el) <= 2 || levenshtein(extNorm, en) <= 2) {
-      return { userId: u.id, rawName: extracted };
+    for (const alias of aliases(u)) {
+      if (!alias || String(alias).trim().length < 2) continue;
+      const aNorm = aliasNormalize(String(alias));
+      if (extNorm === aNorm) return { userId: u.id, rawName: extracted };
     }
   }
   return null;
+}
+
+/**
+ * Classify transfer by counterparty name matching against user nameAliases.
+ * - Same user (counterparty === owner) → own_account
+ * - Different household user → household_member
+ * - No match → third_party
+ */
+function resolveTransferByCounterparty(
+  counterparty: string | null,
+  userId: string | null,
+  users: User[],
+  amount: number
+): TransferClassification {
+  if (!counterparty || counterparty.trim().length < 2) {
+    return {
+      transferType: "third_party",
+      transferCounterparty: counterparty,
+      transferCounterpartyUserId: null,
+      isExcludedFromAnalytics: false,
+      categoryId: amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
+    };
+  }
+  const match = matchUserByAlias(counterparty, users);
+  if (!match) {
+    return {
+      transferType: "third_party",
+      transferCounterparty: counterparty,
+      transferCounterpartyUserId: null,
+      isExcludedFromAnalytics: false,
+      categoryId: amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
+    };
+  }
+  if (userId && match.userId === userId) {
+    return {
+      transferType: "own_account",
+      transferCounterparty: match.rawName,
+      transferCounterpartyUserId: match.userId,
+      isExcludedFromAnalytics: true,
+      categoryId: "transfer/own-account",
+    };
+  }
+  return {
+    transferType: "household_member",
+    transferCounterparty: match.rawName,
+    transferCounterpartyUserId: match.userId,
+    isExcludedFromAnalytics: false,
+    categoryId: amount < 0 ? "transfer/to-household-member" : "transfer/from-household-member",
+  };
 }
 
 export function classifyTransfer(
   description: string,
   amount: number,
   users: User[],
-  rawData?: Record<string, unknown>
+  rawData?: Record<string, unknown>,
+  userId?: string | null
 ): TransferClassification {
   const norm = normalize(description);
 
@@ -123,42 +161,37 @@ export function classifyTransfer(
       };
     }
   }
-  for (const kw of ALPHA_THIRD_PARTY) {
+  for (const kw of PAYZY_OWN_ACCOUNT) {
     if (norm.includes(normalize(kw))) {
-      const cp = extractCounterparty(description, kw);
-      const match = matchHouseholdMember(cp, users);
-      if (match) {
-        return {
-          transferType: "household_member",
-          transferCounterparty: match.rawName,
-          transferCounterpartyUserId: match.userId,
-          isExcludedFromAnalytics: false,
-          categoryId: amount < 0 ? "transfer/to-household-member" : "transfer/from-household-member",
-          isHighConfidence: true,
-        };
-      }
       return {
-        transferType: "third_party",
-        transferCounterparty: cp || null,
+        transferType: "own_account",
+        transferCounterparty: null,
         transferCounterpartyUserId: null,
-        isExcludedFromAnalytics: false,
-        categoryId: amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
+        isExcludedFromAnalytics: true,
+        categoryId: "transfer/own-account",
         isHighConfidence: true,
       };
     }
   }
+  for (const kw of ALPHA_THIRD_PARTY) {
+    if (norm.includes(normalize(kw))) {
+      const cpRaw = extractCounterparty(description, kw) || getNbgCounterpartyName(rawData);
+      const cp = cpRaw != null ? cpRaw : null;
+      return resolveTransferByCounterparty(cp, userId ?? null, users, amount);
+    }
+  }
 
   let matchedKeyword: string | null = null;
-  let isOwnAccount = false;
+  let isOwnAccountKeyword = false;
 
   for (const kw of OWN_ACCOUNT_KEYWORDS) {
     if (norm.includes(normalize(kw))) {
       matchedKeyword = kw;
-      isOwnAccount = true;
+      isOwnAccountKeyword = true;
       break;
     }
   }
-  if (!isOwnAccount) {
+  if (!isOwnAccountKeyword) {
     for (const kw of THIRD_PARTY_KEYWORDS) {
       if (norm.includes(normalize(kw))) {
         matchedKeyword = kw;
@@ -169,26 +202,12 @@ export function classifyTransfer(
 
   if (!matchedKeyword) {
     if (isNbgTransferByCounterpartyAccount(rawData)) {
-      const cpName = getNbgCounterpartyName(rawData);
-      const match = cpName ? matchHouseholdMember(cpName, users) : null;
-      if (match) {
-        return {
-          transferType: "household_member",
-          transferCounterparty: match.rawName,
-          transferCounterpartyUserId: match.userId,
-          isExcludedFromAnalytics: false,
-          categoryId: amount < 0 ? "transfer/to-household-member" : "transfer/from-household-member",
-          isHighConfidence: true,
-        };
-      }
-      return {
-        transferType: "third_party",
-        transferCounterparty: cpName,
-        transferCounterpartyUserId: null,
-        isExcludedFromAnalytics: false,
-        categoryId: amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
-        isHighConfidence: true,
-      };
+      const cpName = getNbgCounterpartyName(rawData) ?? null;
+      return resolveTransferByCounterparty(cpName, userId ?? null, users, amount);
+    }
+    if (isRevolutTransferByCounterparty(rawData)) {
+      const cp = getRevolutCounterpartyName(rawData);
+      return resolveTransferByCounterparty(cp ?? null, userId ?? null, users, amount);
     }
     return {
       transferType: "none",
@@ -198,42 +217,64 @@ export function classifyTransfer(
     };
   }
 
-  const cp = extractCounterparty(description, matchedKeyword);
+  const cp = extractCounterparty(description, matchedKeyword) || getNbgCounterpartyName(rawData);
 
-  if (isOwnAccount) {
+  if (isOwnAccountKeyword) {
+    if (cp && users.length > 0) {
+      const match = matchUserByAlias(cp, users);
+      if (match && userId && match.userId === userId) {
+        return {
+          transferType: "own_account",
+          transferCounterparty: match.rawName,
+          transferCounterpartyUserId: match.userId,
+          isExcludedFromAnalytics: true,
+          categoryId: "transfer/own-account",
+        };
+      }
+      if (match) {
+        return {
+          transferType: "household_member",
+          transferCounterparty: match.rawName,
+          transferCounterpartyUserId: match.userId,
+          isExcludedFromAnalytics: false,
+          categoryId: amount < 0 ? "transfer/to-household-member" : "transfer/from-household-member",
+        };
+      }
+    }
     return {
       transferType: "own_account",
-      transferCounterparty: null,
+      transferCounterparty: cp || null,
       transferCounterpartyUserId: null,
       isExcludedFromAnalytics: true,
       categoryId: "transfer/own-account",
     };
   }
 
-  const match = matchHouseholdMember(cp, users);
-  if (match) {
-    return {
-      transferType: "household_member",
-      transferCounterparty: match.rawName,
-      transferCounterpartyUserId: match.userId,
-      isExcludedFromAnalytics: false,
-      categoryId: amount < 0 ? "transfer/to-household-member" : "transfer/from-household-member",
-    };
-  }
-
-  return {
-    transferType: "third_party",
-    transferCounterparty: cp || null,
-    transferCounterpartyUserId: null,
-    isExcludedFromAnalytics: false,
-    categoryId: amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
-  };
+  return resolveTransferByCounterparty(cp ?? null, userId ?? null, users, amount);
 }
 
-/** Revolut rawData may have Type = 'TRANSFER' */
+/** Revolut: only pocket transfers (To pocket / Αποταμίευση) are own_account */
 export function isRevolutOwnAccountTransfer(rawData?: Record<string, unknown>): boolean {
+  return rawData?.isOwnAccountTransfer === true;
+}
+
+/** Payzy: PAYZY BY COSMOTE (top-up from bank) is own_account */
+export function isPayzyOwnAccountTransfer(rawData?: Record<string, unknown>): boolean {
+  return rawData?.isOwnAccountTransfer === true;
+}
+
+/** Revolut: person-to-person transfer with counterparty in rawData */
+export function isRevolutTransferByCounterparty(rawData?: Record<string, unknown>): boolean {
   const type = rawData?.Type ?? rawData?.type;
-  return String(type).toUpperCase() === "TRANSFER";
+  const cp = rawData?.transferCounterparty;
+  return String(type).toUpperCase() === "TRANSFER" && !!cp && String(cp).trim().length > 0;
+}
+
+/** Get counterparty name from Revolut rawData for household member matching */
+export function getRevolutCounterpartyName(rawData?: Record<string, unknown>): string | null {
+  const cp = rawData?.transferCounterparty;
+  if (!cp || String(cp).trim().length === 0) return null;
+  return String(cp).trim();
 }
 
 /** NBG XLSX: Λογαριασμός αντισυμβαλλόμενου (counterparty account) present → transfer */
@@ -254,7 +295,7 @@ export async function linkOwnAccountTransfers(householdId: string): Promise<numb
   const candidates = await repo.find({
     where: {
       householdId,
-      transferType: "own_account",
+      categoryId: "transfer/own-account",
       linkedTransactionId: IsNull(),
     },
     order: { date: "ASC" },
@@ -278,7 +319,7 @@ export async function linkOwnAccountTransfers(householdId: string): Promise<numb
     const unlinked = await repo
       .createQueryBuilder("tx")
       .where("tx.householdId = :hid", { hid: householdId })
-      .andWhere("tx.transferType = 'own_account'")
+      .andWhere("tx.categoryId = :cat", { cat: "transfer/own-account" })
       .andWhere("tx.id != :id", { id: t.id })
       .andWhere("tx.linkedTransactionId IS NULL")
       .andWhere("tx.date >= :from", { from: fromStr })

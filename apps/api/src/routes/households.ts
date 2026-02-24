@@ -4,7 +4,7 @@ import { Household } from "../entities/Household";
 import { User } from "../entities/User";
 import { Income } from "../entities/Income";
 import { Transaction } from "../entities/Transaction";
-import { getHouseholdMonthlyIncome, getDefaultSplitRatio } from "../services/incomeService";
+import { getHouseholdMonthlyIncome, getSharedExpenseSplit } from "../services/incomeService";
 import { getTransfersInsight } from "../services/insightsService";
 
 export const householdsRouter = Router();
@@ -33,13 +33,24 @@ householdsRouter.get("/", async (_req, res) => {
 
 householdsRouter.post("/", async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, defaultSavingsTarget } = req.body;
     if (!name || typeof name !== "string" || !name.trim()) {
       res.status(400).json({ error: "name is required" });
       return;
     }
+    if (
+      defaultSavingsTarget !== undefined &&
+      defaultSavingsTarget !== null &&
+      (typeof defaultSavingsTarget !== "number" || Number.isNaN(defaultSavingsTarget) || defaultSavingsTarget < 0)
+    ) {
+      res.status(400).json({ error: "defaultSavingsTarget must be a non-negative number" });
+      return;
+    }
     const repo = dataSource.getRepository(Household);
-    const household = repo.create({ name: name.trim() });
+    const household = repo.create({
+      name: name.trim(),
+      defaultSavingsTarget: defaultSavingsTarget ?? null,
+    });
     const saved = await repo.save(household);
     res.status(201).json(saved);
   } catch (err) {
@@ -48,7 +59,7 @@ householdsRouter.post("/", async (req, res) => {
   }
 });
 
-householdsRouter.get("/:hid/default-split", async (req, res) => {
+householdsRouter.get("/:hid/shared-expense-split", async (req, res) => {
   try {
     const { hid } = req.params;
     const household = await dataSource.getRepository(Household).findOne({ where: { id: hid } });
@@ -56,10 +67,10 @@ householdsRouter.get("/:hid/default-split", async (req, res) => {
       res.status(404).json({ error: "Household not found" });
       return;
     }
-    const split = await getDefaultSplitRatio(hid);
+    const split = await getSharedExpenseSplit(hid);
     res.json(split);
   } catch (err) {
-    console.error("Default split:", err);
+    console.error("Shared expense split:", err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
   }
 });
@@ -125,7 +136,7 @@ householdsRouter.get("/:hid", async (req, res) => {
 householdsRouter.put("/:hid", async (req, res) => {
   try {
     const { hid } = req.params;
-    const { name, defaultSplit } = req.body;
+    const { name, defaultSavingsTarget } = req.body;
     const repo = dataSource.getRepository(Household);
     const household = await repo.findOne({ where: { id: hid } });
     if (!household) {
@@ -135,20 +146,18 @@ householdsRouter.put("/:hid", async (req, res) => {
     if (name != null && typeof name === "string" && name.trim()) {
       household.name = name.trim();
     }
-    if (defaultSplit !== undefined) {
-      if (defaultSplit !== null && typeof defaultSplit === "object") {
-        const entries = Object.entries(defaultSplit) as [string, number][];
-        const valid = entries.every(
-          ([k, v]) => typeof k === "string" && typeof v === "number" && v >= 0 && v <= 1
-        );
-        const sum = entries.reduce((s: number, [, v]) => s + v, 0);
-        if (!valid || Math.abs(sum - 1) > 0.001) {
-          res.status(400).json({ error: "defaultSplit must be { [userId]: proportion } summing to 1" });
-          return;
-        }
-        household.defaultSplit = defaultSplit as Record<string, number>;
+    if (defaultSavingsTarget !== undefined) {
+      if (defaultSavingsTarget === null) {
+        household.defaultSavingsTarget = null;
+      } else if (
+        typeof defaultSavingsTarget === "number" &&
+        !Number.isNaN(defaultSavingsTarget) &&
+        defaultSavingsTarget >= 0
+      ) {
+        household.defaultSavingsTarget = defaultSavingsTarget;
       } else {
-        household.defaultSplit = null;
+        res.status(400).json({ error: "defaultSavingsTarget must be null or a non-negative number" });
+        return;
       }
     }
     await repo.save(household);

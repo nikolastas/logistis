@@ -6,46 +6,45 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { User } from "./User";
-import { Household } from "./Household";
+  OneToMany,
+} from 'typeorm';
+import { User } from './User';
+import { Household } from './Household';
+import { IncomePerkCard } from './IncomePerkCard';
 
-@Entity("income")
+@Entity('income')
 export class Income {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column("uuid")
+  @Column('uuid')
   userId!: string;
 
-  @ManyToOne(() => User, (u) => u.incomes, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "userId" })
+  @ManyToOne(() => User, (u) => u.incomes, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
   user!: User;
 
-  @Column("uuid")
+  @Column('uuid')
   householdId!: string;
 
   @ManyToOne(() => Household)
-  @JoinColumn({ name: "householdId" })
+  @JoinColumn({ name: 'householdId' })
   household!: Household;
 
-  @Column("decimal", { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2 })
   netMonthlySalary!: number;
 
-  @Column("decimal", { precision: 10, scale: 2, nullable: true })
-  grossMonthlySalary!: number | null;
-
-  @Column("date")
+  @Column('date')
   effectiveFrom!: string;
 
-  @Column("date", { nullable: true })
+  @Column('date', { nullable: true })
   effectiveTo!: string | null;
 
-  @Column("text", { nullable: true })
+  @Column('text', { nullable: true })
   notes!: string | null;
 
-  @Column("jsonb", { nullable: true })
-  perkCards!: Array<{ name: string; monthlyValue: number }> | null;
+  @OneToMany(() => IncomePerkCard, (ipc) => ipc.income)
+  incomePerkCards!: IncomePerkCard[];
 
   @CreateDateColumn()
   createdAt!: Date;

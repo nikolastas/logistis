@@ -13,13 +13,14 @@ const BANKS = [
   { id: "nbg-xlsx", label: "NBG (XLSX)" },
   { id: "winbank", label: "Winbank (Piraeus)" },
   { id: "revolut", label: "Revolut" },
+  { id: "payzy", label: "Payzy (e-proof PDF)" },
   { id: "generic-pdf", label: "PDF (generic)" },
 ];
 
 export function Upload() {
   const { household, users } = useHousehold();
   const [bank, setBank] = useState("auto");
-  const [ownerId, setOwnerId] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
   const [drag, setDrag] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const navigate = useNavigate();
@@ -28,16 +29,16 @@ export function Upload() {
     mutationFn: ({
       file,
       bankId,
-      ownerId: oid,
+      userId: uid,
       householdId: hid,
     }: {
       file: File;
       bankId: string;
-      ownerId: string | null;
+      userId: string | null;
       householdId: string | null;
     }) =>
       uploadStatement(file, bankId, {
-        ownerId: oid || null,
+        userId: uid || null,
         householdId: hid || null,
       }),
     onSuccess: (data) => setUploadResult(data),
@@ -48,14 +49,14 @@ export function Upload() {
       e.preventDefault();
       setDrag(false);
       const file = e.dataTransfer.files[0];
-      if (file) upload.mutate({ file, bankId: bank, ownerId: ownerId || null, householdId: household?.id ?? null });
+      if (file) upload.mutate({ file, bankId: bank, userId: userId || null, householdId: household?.id ?? null });
     },
-    [bank, ownerId, household?.id, upload]
+    [bank, userId, household?.id, upload]
   );
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) upload.mutate({ file, bankId: bank, ownerId: ownerId || null, householdId: household?.id ?? null });
+    if (file) upload.mutate({ file, bankId: bank, userId: userId || null, householdId: household?.id ?? null });
   };
 
   return (
@@ -80,8 +81,8 @@ export function Upload() {
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Import as</label>
           <select
-            value={ownerId}
-            onChange={(e) => setOwnerId(e.target.value)}
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
           >
             <option value="">Shared (split by income)</option>
@@ -170,8 +171,8 @@ export function Upload() {
                 </p>
                 <p className="text-sm text-slate-500">
                   Bank: {uploadResult.bankSource}
-                  {uploadResult.ownerId
-                    ? ` · Imported as: ${users.find((u) => u.id === uploadResult.ownerId)?.nickname ?? "User"}`
+                  {uploadResult.userId
+                    ? ` · Imported as: ${users.find((u) => u.id === uploadResult.userId)?.nickname ?? "User"}`
                     : " · Split by income"}
                 </p>
               </div>

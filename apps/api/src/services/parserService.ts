@@ -4,6 +4,7 @@ import { categorize } from "../categorizer";
 import {
   classifyTransfer,
   isRevolutOwnAccountTransfer,
+  isPayzyOwnAccountTransfer,
   type TransferClassification,
 } from "./transferDetectionService";
 import type { User } from "../entities/User";
@@ -19,6 +20,7 @@ export interface ProcessedTransaction extends ParsedTransaction {
 export interface ParseFileContext {
   householdId?: string | null;
   users?: User[];
+  userId?: string | null;
 }
 
 export async function parseFile(
@@ -36,7 +38,7 @@ export async function parseFile(
     (buffer[0] === 0x50 && buffer[1] === 0x4b);
 
   const parser = isPdf
-    ? getParser("generic-pdf")
+    ? getParser(bank === "payzy" ? "payzy" : "generic-pdf")
     : isXlsx
       ? getParser(bank === "auto" ? "nbg-xlsx" : bank === "nbg" ? "nbg-xlsx" : bank)
       : getParser(bank === "auto" ? detectBank(buffer) : bank);
@@ -48,7 +50,11 @@ export async function parseFile(
   for (const p of parsed) {
     let transfer: TransferClassification | null = null;
 
-    if (isRevolutOwnAccountTransfer(p.rawData) || p.transferHint === "own_account") {
+    if (
+      isRevolutOwnAccountTransfer(p.rawData) ||
+      isPayzyOwnAccountTransfer(p.rawData) ||
+      p.transferHint === "own_account"
+    ) {
       transfer = {
         transferType: "own_account",
         transferCounterparty: null,
@@ -58,12 +64,26 @@ export async function parseFile(
       };
     }
 
+    const winbankCategoryId = p.rawData?.winbankCategoryId as string | undefined;
+
+    if (!transfer && winbankCategoryId?.startsWith("transfer/")) {
+      transfer = {
+        transferType: "third_party",
+        transferCounterparty: null,
+        transferCounterpartyUserId: null,
+        isExcludedFromAnalytics: false,
+        categoryId: winbankCategoryId,
+      };
+    }
+
     if (!transfer) {
-      transfer = classifyTransfer(p.description, p.amount, users, p.rawData);
+      transfer = classifyTransfer(p.description, p.amount, users, p.rawData, context?.userId);
     }
 
     let categoryId: string;
-    if (transfer.transferType !== "none" && transfer.categoryId) {
+    if (winbankCategoryId && (winbankCategoryId === "cash" || winbankCategoryId.startsWith("transfer/"))) {
+      categoryId = winbankCategoryId;
+    } else if (transfer.transferType !== "none" && transfer.categoryId) {
       categoryId = transfer.categoryId;
     } else {
       categoryId = await categorize(p.description);

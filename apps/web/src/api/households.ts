@@ -40,13 +40,13 @@ export async function getHousehold(id: string): Promise<Household & { users: Use
   return apiClient.get(`/api/households/${id}`);
 }
 
-export async function createHousehold(data: { name: string }): Promise<Household> {
+export async function createHousehold(data: { name: string; defaultSavingsTarget?: number | null }): Promise<Household> {
   return apiClient.post("/api/households", data);
 }
 
 export async function updateHousehold(
   id: string,
-  data: { name?: string; defaultSplit?: Record<string, number> | null }
+  data: { name?: string; defaultSavingsTarget?: number | null }
 ): Promise<Household> {
   return apiClient.put(`/api/households/${id}`, data);
 }
@@ -55,8 +55,8 @@ export async function deleteHousehold(id: string): Promise<void> {
   return apiClient.delete(`/api/households/${id}`);
 }
 
-export async function getDefaultSplit(householdId: string): Promise<Record<string, number>> {
-  return apiClient.get(`/api/households/${householdId}/default-split`);
+export async function getSharedExpenseSplit(householdId: string): Promise<Record<string, number>> {
+  return apiClient.get(`/api/households/${householdId}/shared-expense-split`);
 }
 
 export interface TransfersInsight {
@@ -95,7 +95,7 @@ export async function listUsers(householdId: string): Promise<User[]> {
 
 export async function createUser(
   householdId: string,
-  data: { nickname: string; legalNameEl: string; legalNameEn: string; color?: string }
+  data: { nickname: string; nameAliases: string[]; color?: string }
 ): Promise<User> {
   return apiClient.post(`/api/households/${householdId}/users`, data);
 }
@@ -103,7 +103,7 @@ export async function createUser(
 export async function updateUser(
   householdId: string,
   userId: string,
-  data: Partial<{ nickname: string; legalNameEl: string; legalNameEn: string; color: string }>
+  data: Partial<{ nickname: string; nameAliases: string[]; color: string; expenseShare: number | null }>
 ): Promise<User> {
   return apiClient.put(`/api/households/${householdId}/users/${userId}`, data);
 }
@@ -135,7 +135,6 @@ export async function createIncome(
   userId: string,
   data: {
     netMonthlySalary: number;
-    grossMonthlySalary?: number;
     effectiveFrom: string;
     notes?: string;
     perkCards?: PerkCard[];
@@ -150,7 +149,6 @@ export async function updateIncome(
   incomeId: string,
   data: Partial<{
     netMonthlySalary: number;
-    grossMonthlySalary: number | null;
     effectiveFrom: string;
     effectiveTo: string | null;
     notes: string | null;
@@ -169,4 +167,41 @@ export async function deleteIncome(
   incomeId: string
 ): Promise<void> {
   return apiClient.delete(`/api/households/${householdId}/users/${userId}/income/${incomeId}`);
+}
+
+export async function listPerkCards(
+  householdId: string,
+  userId: string
+): Promise<PerkCard[]> {
+  return apiClient.get(`/api/households/${householdId}/users/${userId}/perk-cards`);
+}
+
+export async function createPerkCard(
+  householdId: string,
+  userId: string,
+  data: { name: string; monthlyValue: number; categoryIds?: string[] }
+): Promise<PerkCard> {
+  return apiClient.post(`/api/households/${householdId}/users/${userId}/perk-cards`, data);
+}
+
+export async function updatePerkCard(
+  householdId: string,
+  userId: string,
+  perkCardId: string,
+  data: Partial<{ name: string; monthlyValue: number; categoryIds: string[] }>
+): Promise<PerkCard> {
+  return apiClient.put(
+    `/api/households/${householdId}/users/${userId}/perk-cards/${perkCardId}`,
+    data
+  );
+}
+
+export async function deletePerkCard(
+  householdId: string,
+  userId: string,
+  perkCardId: string
+): Promise<void> {
+  return apiClient.delete(
+    `/api/households/${householdId}/users/${userId}/perk-cards/${perkCardId}`
+  );
 }

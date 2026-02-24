@@ -1,10 +1,6 @@
-import {
-  Entity,
-  PrimaryColumn,
-  Column,
-} from "typeorm";
+import { Entity, PrimaryColumn, Column } from 'typeorm';
 
-@Entity("categories")
+@Entity('categories')
 export class Category {
   @PrimaryColumn()
   id!: string;
@@ -12,9 +8,6 @@ export class Category {
   @Column()
   name!: string;
 
-  @Column("jsonb", { nullable: true })
-  subcategories?: Array<{ id: string; name: string; keywords?: string[] }>;
-
-  @Column("jsonb", { nullable: true })
+  @Column('jsonb', { nullable: true })
   keywords?: string[];
 }

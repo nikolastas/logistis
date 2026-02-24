@@ -6,7 +6,6 @@ const categories = categoriesData.categories as Array<{
   id: string;
   name: string;
   keywords?: string[];
-  subcategories?: Array<{ id: string; name: string; keywords?: string[] }>;
   excludeFromSpending?: boolean;
 }>;
 
@@ -20,8 +19,12 @@ function normalize(str: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
+const categorizableCategories = categories.filter(
+  (c) => c.id !== UNCATEGORIZED_ID && !c.id.startsWith("transfer/")
+);
+
 const fuse = new Fuse(
-  categories.filter((c) => c.id !== UNCATEGORIZED_ID),
+  categorizableCategories,
   {
     keys: ["name", "keywords"],
     includeScore: true,
@@ -38,13 +41,12 @@ const fuse = new Fuse(
 
 function keywordMatch(description: string): string | null {
   const norm = normalize(description);
-  for (const cat of categories) {
+  for (const cat of categorizableCategories) {
     if (cat.id === UNCATEGORIZED_ID) continue;
-    const words = (cat.keywords || []).flatMap((k) => k.split(/\s+/));
-    for (const w of words) {
-      if (w.length < 3) continue;
-      const nw = normalize(w);
-      if (norm.includes(nw)) return cat.id;
+    for (const keyword of cat.keywords || []) {
+      const nk = normalize(keyword);
+      if (nk.length < 4) continue;
+      if (norm.includes(nk)) return cat.id;
     }
   }
   return null;
@@ -64,8 +66,7 @@ async function openaiMatch(description: string): Promise<string | null> {
   if (!key) return null;
 
   const openai = new OpenAI({ apiKey: key });
-  const catList = categories
-    .filter((c) => c.id !== UNCATEGORIZED_ID)
+  const catList = categorizableCategories
     .map((c) => `${c.id}: ${c.name}`)
     .join(", ");
 
@@ -86,7 +87,7 @@ async function openaiMatch(description: string): Promise<string | null> {
     });
     const text = res.choices[0]?.message?.content?.trim().toLowerCase();
     if (!text) return null;
-    const id = categories.find((c) => c.id === text)?.id;
+    const id = categorizableCategories.find((c) => c.id === text)?.id;
     return id || UNCATEGORIZED_ID;
   } catch {
     return null;
@@ -110,13 +111,8 @@ export function getCategories(): typeof categories {
   return categories;
 }
 
-export function getCategoryById(id: string): (typeof categories)[0] | { id: string; name: string } | undefined {
-  for (const c of categories) {
-    if (c.id === id) return c;
-    const sub = c.subcategories?.find((s) => s.id === id);
-    if (sub) return sub;
-  }
-  return undefined;
+export function getCategoryById(id: string): (typeof categories)[0] | undefined {
+  return categories.find((c) => c.id === id);
 }
 
 export function isExcludedFromSpending(categoryId: string): boolean {
@@ -124,4 +120,22 @@ export function isExcludedFromSpending(categoryId: string): boolean {
   if (cat && "excludeFromSpending" in cat && cat.excludeFromSpending) return true;
   if (categoryId.startsWith("transfer/")) return true;
   return false;
+}
+
+export type TransferType = "none" | "own_account" | "household_member" | "third_party";
+
+/** Derive transfer type from categoryId (e.g. transfer/own-account → own_account) */
+export function getTransferTypeFromCategory(categoryId: string): TransferType | null {
+  if (!categoryId?.startsWith("transfer/")) return null;
+  const suffix = categoryId.replace("transfer/", "");
+  const map: Record<string, TransferType> = {
+    "own-account": "own_account",
+    "to-household-member": "household_member",
+    "from-household-member": "household_member",
+    "to-external-member": "third_party",
+    "from-external-member": "third_party",
+    "to-third-party": "third_party",
+    "from-third-party": "third_party",
+  };
+  return map[suffix] ?? null;
 }

@@ -1,1 +1,421 @@
-{"categories": [{"id": "uncategorized", "name": "Uncategorized", "keywords": []}, {"id": "food", "name": "Food & Groceries", "keywords": ["supermarket", "grocery", "lidl", "ab", "carrefour", "sklavenitis", "market", "restaurant", "cafe", "coffee", "delivery", "wolt", "efood", "food", "bakery", "φαγητό", "σούπερ μάρκετ", "εστιατόριο"]}, {"id": "transport", "name": "Transport", "keywords": ["fuel", "gas", "petrol", "shell", "bp", "eko", "taxi", "uber", "bolt", "metro", "bus", "ticket", "parking", "αεροπορικά", "flight", "train", "βενζίνη", "πάρκινγκ"]}, {"id": "utilities", "name": "Utilities", "keywords": ["electric", "water", "gas", "internet", "phone", "mobile", "dee", "vodafone", "cosmote", "wind", "forthnet", "ρεύμα", "νερό", "τηλέφωνο", "internet"]}, {"id": "entertainment", "name": "Entertainment", "keywords": ["netflix", "spotify", "disney", "hbo", "cinema", "movie", "theater", "concert", "gym", "subscription", "παράσταση", "συνδρομή"]}, {"id": "shopping", "name": "Shopping", "keywords": ["amazon", "ebay", "ikea", "h&m", "zara", "clothes", "fashion", "electronics", "media markt", "προϊόντα", "ρούχα"]}, {"id": "travel", "name": "Travel", "keywords": ["hotel", "booking", "airbnb", "trip", "vacation", "ξενοδοχείο", "ταξίδι", "διακοπές"]}, {"id": "health", "name": "Health", "keywords": ["pharmacy", "doctor", "hospital", "medicine", "φαρμακείο", "ιατρός", "νοσοκομείο"]}, {"id": "insurance", "name": "Insurance", "keywords": ["insurance", "ασφάλεια"]}, {"id": "income", "name": "Income", "keywords": ["salary", "wage", "deposit", "transfer in", "μισθός", "κατάθεση"]}, {"id": "transfer", "name": "Transfer", "subcategories": [{"id": "transfer/own-account", "name": "Own Account"}, {"id": "transfer/to-household-member", "name": "To Household Member"}, {"id": "transfer/from-household-member", "name": "From Household Member"}, {"id": "transfer/to-third-party", "name": "To Third Party"}, {"id": "transfer/from-third-party", "name": "From Third Party"}], "keywords": [], "excludeFromSpending": true}]}
+{
+  "categories": [
+    {
+      "id": "uncategorized",
+      "name": "Uncategorized",
+      "keywords": []
+    },
+    {
+      "id": "cash",
+      "name": "Cash",
+      "keywords": ["ΑΤΜ-ΑΝΑΛΗΨΗ ΜΕΤΡΗΤΩΝ", "atm", "αναληψη μετρητων", "Κατάθεση σε ΑΤΜ ΕΤΕ"]
+    },
+    {
+      "id": "cashback",
+      "name": "Cashback",
+      "keywords": []
+    },
+    {
+      "id": "credit",
+      "name": "Credit",
+      "keywords": []
+    },
+    {
+      "id": "donations",
+      "name": "Donations",
+      "keywords": []
+    },
+    {
+      "id": "entertainment",
+      "name": "Entertainment",
+      "keywords": [
+        "netflix",
+        "primetrust",
+        "spotify",
+        "amznprimetr",
+        "Tidal Music",
+        "Village",
+        "disney",
+        "hbo",
+        "cinema",
+        "movie",
+        "theater",
+        "concert",
+        "gym",
+        "subscription",
+        "παράσταση",
+        "συνδρομή"
+      ]
+    },
+    {
+      "id": "food",
+      "name": "Food & Drinks",
+      "keywords": [
+        "restaurant",
+        "cafe",
+        "coffee",
+        "delivery",
+        "wolt",
+        "efood",
+        "ΕΦΟΟΔ",
+        "box",
+        "φαγητό",
+        "εστιατόριο",
+        "CHRYSOVALANTIS BATSO ZOGRAFOU",
+        "TAF",
+        "PAVO EE CHALANDRI",
+        "COFFEE ACADEMY",
+        "OPISTHODROMIKES",
+        "ASYMMETRO ATHINA",
+        "Mcdonald",
+        "ΜΑΙΛΟΣ",
+        "Starbucks",
+        "Eurocoffee",
+        "Yasouvlaki",
+        "bakery",
+        "KOUTSOGKILAS ATHAN ZOGRAFOS",
+        "OPUS",
+        "SAMARAS V KAI SIA OE GLYFADA",
+        "PAYPAL ONLINEDELIV",
+        "SHAKESBEER",
+        "Mythos Zan Moreas",
+        "Coffee Academy",
+        "MYTHOS ZAN MOREAS",
+        "HANDPICKERS",
+        "JERRY S HOUSE",
+        "TOURKANTONI",
+        "GOUDI RESTO SINGLE",
+        "Blysscafe",
+        "Antheon Tyropita Santouits",
+        "EMM MOUTSOS",
+        "K TSAKONITIS AND SIA E",
+        "SAM BURGERS POS",
+        "Stamou Athanasia",
+        "LIDO",
+        "MACONDO PROJECT",
+        "O KOSTAS SIARKOS",
+        "HUNTERS RESTAURANT",
+        "PICASSO ATHENS",
+        "PAPAYA BAR",
+        "MAIMOU OE",
+        "UMAMI 7A",
+        "PSITOPOLEIO ESTIATORIO",
+        "ZACHAROPLASTEIO KOSMIK",
+        "OVEN",
+        "1948",
+        "FRED EE",
+        "LOT 51",
+        "CAFE BREAK E E",
+        "NAIF ATHENS",
+        "CHARLIE DOS",
+        "RUMORS",
+        "ROMA",
+        "Borghiciana",
+        "Sant'eustachio",
+        "Ristorante Le Felizian",
+        "CARD_PAYMENT M & M San Giorgio Sas",
+        "Crf Gs S.p.a",
+        "Souvlakia I Leivadia",
+        "Bun Kok",
+        "Antheon Tyropita Santouits Kafe",
+        "Tzoutzoukos Ee",
+        "Fred",
+        "ZAXAROPLASTIO MELINA",
+        "ANGELIKI KOSTAKI",
+        "LA MERISE",
+        "HANKY PANKY",
+        "Milkas Evaggelos",
+        "MANTANIA"
+      ]
+    },
+    {
+      "id": "groceries",
+      "name": "Groceries",
+      "keywords": [
+        "supermarket",
+        "grocery",
+        "lidl",
+        "ab",
+        "AB",
+        "AB",
+        "carrefour",
+        "sklavenitis",
+        "market",
+        "σούπερ μάρκετ",
+        "AB_ELLINIKO ELLINIKO",
+        "SKLAVENITIS",
+        "AB VASILOPOULOS",
+        "AB SHOP",
+        "MY MARKET",
+        "THE MART",
+        "KRITIKOS",
+        "Supermercato Carrefour",
+        "Carrefour Express",
+        "Krokos",
+        "MASOUTIS",
+        "DELENIKAS DIMITRIOS"
+      ]
+    },
+    {
+      "id": "general-gift",
+      "name": "General Gift",
+      "keywords": []
+    },
+    {
+      "id": "health",
+      "name": "Health",
+      "keywords": [
+        "pharmacy",
+        "doctor",
+        "hospital",
+        "medicine",
+        "φαρμακείο",
+        "ιατρός",
+        "νοσοκομείο",
+        "FARMAKEIO",
+        "Semertzaki Olga",
+        "HEALTH SPOT",
+        "OPTOLIFE",
+        "Enorfarm",
+        "BIOIATRIKI"
+      ]
+    },
+    {
+      "id": "insurance",
+      "name": "Insurance",
+      "keywords": ["insurance", "ασφάλεια", "ΑΝΑΝΕΩΣΗ ΧΡΕΩΣΤΙΚΗΣ ΚΑΡΤΑΣ"]
+    },
+    {
+      "id": "income",
+      "name": "Income",
+      "keywords": [
+        "salary",
+        "wage",
+        "deposit",
+        "transfer in",
+        "μισθός",
+        "κατάθεση",
+        "Μισθος",
+        "ΜΙΣΘΟΔΟΣΙΑ",
+        "ΣΚΡΟΥΤΖ ΥΠΗΡΕΣΙΕΣ ΔΙΑΝΟΜΗΣ",
+        "EMP",
+        "ΕΙΔΙΚΟΣ ΛΟΓΑΡΙΑΣΜΟΣ ΚΟΝΔΥΛΙΩ"
+      ]
+    },
+    {
+      "id": "investment",
+      "name": "Investment",
+      "keywords": ["freedom", "ΕΝΤΟΛΗ/ΕΜΒΑΣΜΑ ΣΕ ΑΛΛΗ ΤΡΑΠΕΖΑ", "brokerage", "22 ΕΚΔΟΣΗ ΕΝΤΟΛΗΣ"]
+    },
+    {
+      "id": "loan",
+      "name": "Loan",
+      "keywords": []
+    },
+    {
+      "id": "refunds",
+      "name": "Refunds",
+      "keywords": [
+        "TOPUP Payment from Paypal",
+        "refund",
+        "TOPUP Payment from Paypal Europe Sarl Et Cie Sca"
+      ]
+    },
+    {
+      "id": "savings",
+      "name": "Savings",
+      "keywords": []
+    },
+    {
+      "id": "services",
+      "name": "Services",
+      "keywords": ["Todoist", "LeetCode", "subscription"]
+    },
+    {
+      "id": "shopping",
+      "name": "Shopping",
+      "keywords": [
+        "amazon",
+        "ebay",
+        "ikea",
+        "h&m",
+        "zara",
+        "clothes",
+        "fashion",
+        "electronics",
+        "media markt",
+        "προϊόντα",
+        "ρούχα",
+        "SKROUTZ",
+        "Klarna",
+        "EVERYPAY",
+        "NIKE",
+        "ASOS",
+        "MASSIMO DUTTI",
+        "MARKS SPENCER",
+        "DECATHLON",
+        "ntalaperas",
+        "FUNKY BUDDHA",
+        "COSMOSSPORT",
+        "AMERICAN EAGLE",
+        "Abercrombie",
+        "Americaneag",
+        "massimodutticom",
+        "HM",
+        "BUZZ CLYFADA",
+        "ISTORM",
+        "DECATHLON GREECE"
+      ]
+    },
+    {
+      "id": "tech",
+      "name": "Tech",
+      "keywords": ["PADDLE.NET", "software"]
+    },
+    {
+      "id": "trading",
+      "name": "Trading",
+      "keywords": []
+    },
+    {
+      "id": "transport",
+      "name": "Transport",
+      "keywords": [
+        "oasa",
+        "fuel",
+        "gas",
+        "petrol",
+        "shell",
+        "bp",
+        "eko",
+        "taxi",
+        "uber",
+        "bolt",
+        "metro",
+        "bus",
+        "ticket",
+        "parking",
+        "αεροπορικά",
+        "flight",
+        "train",
+        "βενζίνη",
+        "πάρκινγκ",
+        "ERMIS",
+        "The Mall Athens",
+        "ATHENS INTL AIRPORT",
+        "NEA ODOS",
+        "ATTIKI ODOS",
+        "OLYMPIA ODOS",
+        "FERRYHOPPER",
+        "BP",
+        "BP",
+        "Elin_madesi_alimos",
+        "ERMIS 497",
+        "DIMCOGLYFADA",
+        "DAEM SA",
+        "UBR PENDINGUBERCOM",
+        "BOLT",
+        "TOYOTA GIANNITSAS",
+        "ΒΚΜ1203",
+        "Meb-Ottaviano-412",
+        "Atac",
+        "ISMAILOS"
+      ]
+    },
+    {
+      "id": "travel",
+      "name": "Travel",
+      "keywords": [
+        "hotel",
+        "booking",
+        "airbnb",
+        "trip",
+        "vacation",
+        "ξενοδοχείο",
+        "ταξίδι",
+        "διακοπές"
+      ]
+    },
+    {
+      "id": "utilities",
+      "name": "Utilities",
+      "keywords": [
+        "electric",
+        "water",
+        "gas",
+        "internet",
+        "phone",
+        "mobile",
+        "dee",
+        "vodafone",
+        "cosmote",
+        "wind",
+        "forthnet",
+        "ρεύμα",
+        "νερό",
+        "τηλέφωνο",
+        "COSMOTE",
+        "CACTUS BARBERSHOP",
+        "ntzinis",
+        "PARABOLO"
+      ]
+    },
+    {
+      "id": "euro-from-others",
+      "name": "Euro from Others",
+      "keywords": [
+        "REWARD Referral",
+        "EXCHANGE Revolut",
+        "REWARD Referral promotion",
+        "EXCHANGE Revolut Ltd"
+      ]
+    },
+    {
+      "id": "gamble",
+      "name": "Gamble",
+      "keywords": ["Stoiximan", "betting"]
+    },
+    {
+      "id": "transfer/own-account",
+      "name": "Transfer / Own Account",
+      "keywords": [],
+      "excludeFromSpending": true
+    },
+    {
+      "id": "transfer/to-household-member",
+      "name": "Transfer / To Household Member",
+      "keywords": [],
+      "excludeFromSpending": true
+    },
+    {
+      "id": "transfer/from-household-member",
+      "name": "Transfer / From Household Member",
+      "keywords": [],
+      "excludeFromSpending": true
+    },
+    {
+      "id": "transfer/to-external-member",
+      "name": "Transfer / To External Contact",
+      "keywords": [],
+      "excludeFromSpending": true
+    },
+    {
+      "id": "transfer/from-external-member",
+      "name": "Transfer / From External Contact",
+      "keywords": [],
+      "excludeFromSpending": true
+    },
+    {
+      "id": "transfer/to-third-party",
+      "name": "Transfer / To Third Party",
+      "keywords": [],
+      "excludeFromSpending": true
+    },
+    {
+      "id": "transfer/from-third-party",
+      "name": "Transfer / From Third Party",
+      "keywords": [],
+      "excludeFromSpending": true
+    }
+  ]
+}

@@ -7,6 +7,8 @@ import { insightsRouter } from "./routes/insights";
 import { householdsRouter } from "./routes/households";
 import { usersRouter } from "./routes/users";
 import { incomeRouter } from "./routes/income";
+import { perkCardsRouter } from "./routes/perkCards";
+import { budgetsRouter } from "./routes/budgets";
 
 export const app: Express = express();
 
@@ -19,6 +21,8 @@ app.use("/api/goals", goalsRouter);
 app.use("/api/insights", insightsRouter);
 app.use("/api/households", householdsRouter);
 householdsRouter.use("/:hid/users", usersRouter);
+householdsRouter.use("/:hid/budgets", budgetsRouter);
 usersRouter.use("/:uid/income", incomeRouter);
+usersRouter.use("/:uid/perk-cards", perkCardsRouter);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));

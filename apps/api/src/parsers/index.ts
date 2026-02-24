@@ -5,6 +5,7 @@ import { nbgXlsxParser } from "./nbgXlsx";
 import { winbankParser } from "./winbank";
 import { revolutParser } from "./revolut";
 import { genericPdfParser } from "./genericPdf";
+import { payzyParser } from "./payzy";
 
 const csvParsers: BankParser[] = [
   alphaBankParser,
@@ -13,10 +14,19 @@ const csvParsers: BankParser[] = [
   revolutParser,
 ];
 
-export type BankId = "alpha-bank" | "nbg" | "nbg-xlsx" | "winbank" | "revolut" | "generic-pdf" | "auto";
+export type BankId =
+  | "alpha-bank"
+  | "nbg"
+  | "nbg-xlsx"
+  | "winbank"
+  | "revolut"
+  | "generic-pdf"
+  | "payzy"
+  | "auto";
 
 export function getParser(bank: BankId): BankParser {
   if (bank === "generic-pdf") return genericPdfParser;
+  if (bank === "payzy") return payzyParser;
   if (bank === "nbg-xlsx") return nbgXlsxParser;
   if (bank === "auto") return csvParsers[0];
   const p = csvParsers.find((x) => x.name === bank);
@@ -38,5 +48,13 @@ export function detectBank(buffer: Buffer): BankId {
   return "alpha-bank";
 }
 
-export { alphaBankParser, nbgParser, nbgXlsxParser, winbankParser, revolutParser, genericPdfParser };
+export {
+  alphaBankParser,
+  nbgParser,
+  nbgXlsxParser,
+  winbankParser,
+  revolutParser,
+  genericPdfParser,
+  payzyParser,
+};
 export type { BankParser } from "./base";

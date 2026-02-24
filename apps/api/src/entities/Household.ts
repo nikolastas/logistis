@@ -16,9 +16,8 @@ export class Household {
   @Column({ type: "varchar", length: 255 })
   name!: string;
 
-  /** Custom default split: { [userId]: proportion } summing to 1. If null, falls back to income-based. */
-  @Column({ type: "jsonb", nullable: true })
-  defaultSplit!: Record<string, number> | null;
+  @Column("decimal", { precision: 12, scale: 2, nullable: true })
+  defaultSavingsTarget!: number | null;
 
   @OneToMany(() => User, (u) => u.household)
   users!: User[];

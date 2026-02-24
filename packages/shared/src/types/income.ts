@@ -1,7 +1,9 @@
 export interface PerkCard {
+  id?: string;
   name: string;
   monthlyValue: number;
-  categoryId: string; // category from categories.json — what this perk is spent on (e.g. food, transport)
+  /** Categories this perk can be used on (e.g. food, transport) */
+  categoryIds: string[];
 }
 
 export interface Income {
@@ -9,7 +11,6 @@ export interface Income {
   userId: string;
   householdId: string;
   netMonthlySalary: number;
-  grossMonthlySalary: number | null;
   effectiveFrom: string;
   effectiveTo: string | null;
   notes: string | null;

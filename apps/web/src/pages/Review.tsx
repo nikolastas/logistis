@@ -4,13 +4,21 @@ import {
   listTransactions,
   updateTransaction,
   bulkUpdateTransactions,
+  bulkDeleteTransactions,
   type Transaction,
-  type TransferType,
 } from "../api/transactions";
 import { getCategories, flattenCategoryOptions } from "../api/insights";
 import { useHousehold } from "../context/HouseholdContext";
-import { getDefaultSplit } from "../api/households";
 import type { User } from "@couple-finance/shared";
+
+const isOwnAccount = (c: string) => c === "transfer/own-account";
+const isHouseholdMember = (c: string) =>
+  c === "transfer/to-household-member" || c === "transfer/from-household-member";
+const isThirdParty = (c: string) =>
+  c === "transfer/to-third-party" ||
+  c === "transfer/from-third-party" ||
+  c === "transfer/to-external-member" ||
+  c === "transfer/from-external-member";
 
 function TransferDetailPanel({
   transaction,
@@ -23,9 +31,9 @@ function TransferDetailPanel({
   onUpdate: (data: Parameters<typeof updateTransaction>[1]) => void;
   onClose: () => void;
 }) {
-  const [counterparty, setCounterparty] = useState(transaction.transferCounterparty ?? "");
+  const cat = transaction.categoryId;
 
-  if (transaction.transferType === "own_account") {
+  if (isOwnAccount(cat)) {
     return (
       <div className="text-sm">
         <p className="text-slate-600 mb-2">
@@ -35,7 +43,7 @@ function TransferDetailPanel({
         </p>
         <div className="flex gap-2">
           <button
-            onClick={() => onUpdate({ transferType: "none", isExcludedFromAnalytics: false })}
+            onClick={() => onUpdate({ categoryId: "uncategorized", isExcludedFromAnalytics: false })}
             className="px-3 py-1 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
           >
             Not a transfer
@@ -48,29 +56,36 @@ function TransferDetailPanel({
     );
   }
 
-  if (transaction.transferType === "household_member") {
+  if (isHouseholdMember(cat)) {
     const toUser = users.find((u) => u.id === transaction.transferCounterpartyUserId);
-    const fromUser = transaction.ownerId ? users.find((u) => u.id === transaction.ownerId) : null;
+    const fromUser = transaction.userId ? users.find((u) => u.id === transaction.userId) : null;
+    const toLabel = toUser?.nickname ?? "?";
+    const iconFromTo = transaction.amount < 0 ? "→" : "←";
     return (
       <div className="text-sm">
         <p className="text-slate-600 mb-2">
-          {fromUser?.nickname ?? "Shared"} → {toUser?.nickname ?? "?"}
+          {fromUser?.nickname ?? "Shared"} {iconFromTo} {toLabel}
         </p>
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => onUpdate({ transferType: "own_account" as TransferType })}
+            onClick={() => onUpdate({ categoryId: "transfer/own-account" })}
             className="px-3 py-1 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
           >
             Reclassify: Own Account
           </button>
           <button
-            onClick={() => onUpdate({ transferType: "third_party" as TransferType, transferCounterpartyUserId: null })}
+            onClick={() =>
+              onUpdate({
+                categoryId: transaction.amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
+                transferCounterpartyUserId: null,
+              })
+            }
             className="px-3 py-1 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
           >
             Reclassify: Third Party
           </button>
           <button
-            onClick={() => onUpdate({ transferType: "none" as TransferType })}
+            onClick={() => onUpdate({ categoryId: "uncategorized" })}
             className="px-3 py-1 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
           >
             Not a transfer
@@ -83,18 +98,12 @@ function TransferDetailPanel({
     );
   }
 
-  if (transaction.transferType === "third_party") {
+  if (isThirdParty(cat)) {
     return (
       <div className="text-sm">
-        <div className="mb-2">
-          <label className="block text-slate-600 mb-1">Counterparty</label>
-          <input
-            value={counterparty}
-            onChange={(e) => setCounterparty(e.target.value)}
-            onBlur={() => counterparty !== (transaction.transferCounterparty ?? "") && onUpdate({ transferCounterparty: counterparty || null })}
-            className="border border-slate-300 rounded px-2 py-1 w-48"
-          />
-        </div>
+        <p className="text-slate-600 mb-2">
+          Counterparty: {users.find((u) => u.id === transaction.transferCounterpartyUserId)?.nickname ?? "External"}
+        </p>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => onUpdate({ countAsExpense: true })}
@@ -109,7 +118,7 @@ function TransferDetailPanel({
             Exclude from analytics
           </button>
           <button
-            onClick={() => onUpdate({ transferType: "none" as TransferType })}
+            onClick={() => onUpdate({ categoryId: "uncategorized" })}
             className="px-3 py-1 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
           >
             Not a transfer
@@ -137,7 +146,7 @@ export function Review() {
     from: "",
     to: "",
     category: "",
-    owner: "",
+    userId: "",
     amountMin: "",
     amountMax: "",
   });
@@ -146,11 +155,12 @@ export function Review() {
     from: "",
     to: "",
     category: "",
-    owner: "",
+    userId: "",
     amountMin: "",
     amountMax: "",
   });
   const [expandedTransferId, setExpandedTransferId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const applyFilters = () => setAppliedFilters({ ...filterInputs });
 
@@ -162,11 +172,7 @@ export function Review() {
         ...(appliedFilters.from && { from: appliedFilters.from }),
         ...(appliedFilters.to && { to: appliedFilters.to }),
         ...(appliedFilters.category && { category: appliedFilters.category }),
-        ...(appliedFilters.owner && {
-          ...(/^[0-9a-f-]{36}$/i.test(appliedFilters.owner)
-            ? { ownerId: appliedFilters.owner }
-            : { owner: appliedFilters.owner }),
-        }),
+        ...(appliedFilters.userId && { userId: appliedFilters.userId }),
         ...(household?.id && { householdId: household.id }),
         ...(appliedFilters.amountMin && { amountMin: appliedFilters.amountMin }),
         ...(appliedFilters.amountMax && { amountMax: appliedFilters.amountMax }),
@@ -180,12 +186,6 @@ export function Review() {
   });
   const categoryOptions = flattenCategoryOptions(categories);
 
-  const { data: defaultSplit = {} } = useQuery({
-    queryKey: ["default-split", household?.id],
-    queryFn: () => (household ? getDefaultSplit(household.id) : Promise.resolve({})),
-    enabled: !!household,
-  });
-
   const update = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateTransaction>[1] }) =>
       updateTransaction(id, data!),
@@ -193,7 +193,7 @@ export function Review() {
   });
 
   const bulkUpdate = useMutation({
-    mutationFn: (data: { categoryId?: string; ownerId?: string | null; splitRatio?: Record<string, number> }) =>
+    mutationFn: (data: { categoryId?: string; userId?: string | null }) =>
       bulkUpdateTransactions(Array.from(selected), data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
@@ -203,17 +203,23 @@ export function Review() {
     },
   });
 
+  const bulkDelete = useMutation({
+    mutationFn: () => bulkDeleteTransactions(Array.from(selected)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      setSelected(new Set());
+      setShowDeleteConfirm(false);
+    },
+  });
+
   const handleCategoryChange = (t: Transaction, categoryId: string) => {
     update.mutate({ id: t.id, data: { categoryId } });
   };
 
-  const handleOwnerChange = (t: Transaction, newOwnerId: string | null, newSplit?: Record<string, number>) => {
+  const handleOwnerChange = (t: Transaction, newUserId: string | null) => {
     update.mutate({
       id: t.id,
-      data: {
-        ownerId: newOwnerId,
-        splitRatio: newSplit ?? (newOwnerId ? { [newOwnerId]: 1 } : defaultSplit),
-      },
+      data: { userId: newUserId },
     });
   };
 
@@ -232,12 +238,9 @@ export function Review() {
   };
 
   const handleBulkApply = () => {
-    const data: { categoryId?: string; ownerId?: string | null; splitRatio?: Record<string, number> } = {};
+    const data: { categoryId?: string; userId?: string | null } = {};
     if (bulkCategory) data.categoryId = bulkCategory;
-    if (bulkOwner) {
-      data.ownerId = bulkOwner || null;
-      data.splitRatio = bulkOwner ? { [bulkOwner]: 1 } : defaultSplit;
-    }
+    if (bulkOwner) data.userId = bulkOwner || null;
     if (Object.keys(data).length === 0) return;
     bulkUpdate.mutate(data);
   };
@@ -247,7 +250,7 @@ export function Review() {
     appliedFilters.from ||
     appliedFilters.to ||
     appliedFilters.category ||
-    appliedFilters.owner ||
+    appliedFilters.userId ||
     appliedFilters.amountMin ||
     appliedFilters.amountMax;
   const clearFilters = () => {
@@ -256,7 +259,7 @@ export function Review() {
       from: "",
       to: "",
       category: "",
-      owner: "",
+      userId: "",
       amountMin: "",
       amountMax: "",
     };
@@ -339,14 +342,14 @@ export function Review() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-0.5">Owner</label>
+            <label className="block text-xs text-slate-500 mb-0.5">User</label>
             <select
-              value={filterInputs.owner}
-              onChange={(e) => setFilterInputs((f) => ({ ...f, owner: e.target.value }))}
+              value={filterInputs.userId}
+              onChange={(e) => setFilterInputs((f) => ({ ...f, userId: e.target.value }))}
               className="text-sm border border-slate-300 rounded px-2 py-1"
             >
               <option value="">All</option>
-              <option value="">Shared</option>
+              <option value="__shared__">Shared</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.nickname}
@@ -413,7 +416,7 @@ export function Review() {
             onChange={(e) => setBulkOwner(e.target.value)}
             className="text-sm border border-slate-300 rounded px-2 py-1"
           >
-            <option value="">Set owner...</option>
+            <option value="">Set user...</option>
             <option value="">Shared (income split)</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -429,11 +432,43 @@ export function Review() {
             Apply
           </button>
           <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-3 py-1 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50"
+          >
+            Delete
+          </button>
+          <button
             onClick={() => setSelected(new Set())}
             className="px-3 py-1 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
           >
             Clear selection
           </button>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md mx-4">
+            <p className="text-slate-800 font-medium mb-2">Delete transactions?</p>
+            <p className="text-slate-600 text-sm mb-4">
+              This will permanently delete {selected.size} transaction{selected.size !== 1 ? "s" : ""}. This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-3 py-1.5 text-sm border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => bulkDelete.mutate()}
+                disabled={bulkDelete.isPending}
+                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {bulkDelete.isPending ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -489,7 +524,7 @@ export function Review() {
                 </td>
                 <td className="px-4 py-2">
                   <select
-                    value={t.ownerId ?? ""}
+                    value={t.userId ?? ""}
                     onChange={(e) => {
                       const v = e.target.value;
                       handleOwnerChange(t, v || null);
@@ -503,16 +538,9 @@ export function Review() {
                       </option>
                     ))}
                   </select>
-                  {t.splitRatio && Object.keys(t.splitRatio).length > 1 && (
-                    <span className="ml-1 text-xs text-slate-500">
-                      {Object.entries(t.splitRatio)
-                        .map(([uid, pct]) => `${users.find((u) => u.id === uid)?.nickname ?? uid}: ${Math.round(pct * 100)}%`)
-                        .join(", ")}
-                    </span>
-                  )}
                 </td>
                 <td className="px-4 py-2">
-                  {t.transferType === "own_account" && (
+                  {isOwnAccount(t.categoryId) && (
                     <button
                       onClick={() => setExpandedTransferId(expandedTransferId === t.id ? null : t.id)}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-200 text-slate-700 hover:bg-slate-300"
@@ -521,7 +549,7 @@ export function Review() {
                       {!t.linkedTransactionId && <span className="text-amber-600">(unlinked)</span>}
                     </button>
                   )}
-                  {t.transferType === "household_member" && t.transferCounterpartyUserId && (
+                  {isHouseholdMember(t.categoryId) && t.transferCounterpartyUserId && (
                     <button
                       onClick={() => setExpandedTransferId(expandedTransferId === t.id ? null : t.id)}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs text-white"
@@ -529,25 +557,25 @@ export function Review() {
                         backgroundColor: users.find((u) => u.id === t.transferCounterpartyUserId)?.color ?? "#6366f1",
                       }}
                     >
-                      👤 {users.find((u) => u.id === t.transferCounterpartyUserId)?.nickname ?? t.transferCounterparty ?? "?"}
+                      👤 {users.find((u) => u.id === t.transferCounterpartyUserId)?.nickname ?? "?"}
                     </button>
                   )}
-                  {t.transferType === "third_party" && (
+                  {isThirdParty(t.categoryId) && (
                     <button
                       onClick={() => setExpandedTransferId(expandedTransferId === t.id ? null : t.id)}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 hover:bg-blue-200"
                     >
                       🌐 Third Party
-                      {t.transferCounterparty && (
-                        <span className="max-w-[80px] truncate" title={t.transferCounterparty}>
-                          {t.transferCounterparty}
+                      {t.transferCounterpartyUserId && (
+                        <span className="max-w-[80px] truncate" title={users.find((u) => u.id === t.transferCounterpartyUserId)?.nickname}>
+                          {users.find((u) => u.id === t.transferCounterpartyUserId)?.nickname}
                         </span>
                       )}
                     </button>
                   )}
                 </td>
               </tr>
-              {expandedTransferId === t.id && (t.transferType === "own_account" || t.transferType === "household_member" || t.transferType === "third_party") && (
+              {expandedTransferId === t.id && (isOwnAccount(t.categoryId) || isHouseholdMember(t.categoryId) || isThirdParty(t.categoryId)) && (
                 <tr>
                   <td colSpan={7} className="px-4 py-3 bg-slate-50 border-b border-slate-200">
                     <TransferDetailPanel

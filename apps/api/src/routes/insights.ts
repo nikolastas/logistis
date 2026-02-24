@@ -6,6 +6,7 @@ import {
   getSpendingByCategory,
   getSpendingByOwner,
   getSpendingByMonth,
+  getSpendingByMonthAndCategory,
 } from "../services/insightsService";
 
 export const insightsRouter = Router();
@@ -33,13 +34,18 @@ insightsRouter.get("/summary", async (_req, res) => {
 
 insightsRouter.get("/spending", async (req, res) => {
   try {
-    const { from, to, householdId } = req.query as { from?: string; to?: string; householdId?: string };
+    const { from, to, householdId, userId } = req.query as {
+      from?: string;
+      to?: string;
+      householdId?: string;
+      userId?: string;
+    };
 
     const repo = dataSource.getRepository(Transaction);
     const [byCategory, byOwner, byMonth, totalCount, expenseCount] = await Promise.all([
-      getSpendingByCategory(from, to),
-      getSpendingByOwner(from, to, householdId),
-      getSpendingByMonth(from, to),
+      getSpendingByCategory(from, to, householdId, userId),
+      getSpendingByOwner(from, to, householdId, userId),
+      getSpendingByMonth(from, to, householdId, userId),
       repo.count(),
       repo.createQueryBuilder("t").where("t.amount < 0").getCount(),
     ]);
@@ -58,6 +64,36 @@ insightsRouter.get("/spending", async (req, res) => {
     });
   } catch (err) {
     console.error("Insights:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
+  }
+});
+
+insightsRouter.get("/spending-by-month-category", async (req, res) => {
+  try {
+    const { year, householdId, userId } = req.query as {
+      year?: string;
+      householdId?: string;
+      userId?: string;
+    };
+    const y = year ? parseInt(year, 10) : new Date().getFullYear();
+    if (isNaN(y)) {
+      res.status(400).json({ error: "Invalid year" });
+      return;
+    }
+
+    const rows = await getSpendingByMonthAndCategory(
+      y,
+      householdId || undefined,
+      userId
+    );
+    const withNames = rows.map((r) => ({
+      ...r,
+      categoryName: getCategoryById(r.categoryId)?.name ?? r.categoryId,
+    }));
+
+    res.json(withNames);
+  } catch (err) {
+    console.error("Spending by month/category:", err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
   }
 });

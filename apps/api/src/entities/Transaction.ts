@@ -5,70 +5,77 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { Category } from "./Category";
+} from 'typeorm';
+import { Category } from './Category';
+import { User } from './User';
 
-@Entity("transactions")
+@Entity('transactions')
 export class Transaction {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column("date")
+  @Column('date')
   date!: string;
 
-  @Column("text")
+  @Column('text')
   description!: string;
 
-  @Column("decimal", { precision: 12, scale: 2 })
+  /** Positive = user receives; negative = user pays */
+  @Column('decimal', { precision: 12, scale: 2 })
   amount!: number;
 
-  @Column("varchar", { length: 50 })
+  @Column('varchar', { length: 50 })
   categoryId!: string;
 
-  @ManyToOne(() => Category, { onDelete: "SET NULL", nullable: true })
-  @JoinColumn({ name: "categoryId" })
+  @ManyToOne(() => Category, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'categoryId' })
   category?: Category | null;
 
-  @Column({ type: "varchar", length: 20, nullable: true })
-  owner?: "user1" | "user2" | "shared" | null;
+  /**
+   * User who owns the transaction. Null = shared (split by household expenseShare).
+   * Non-null = personal (100% attributed to this user).
+   */
+  @Column('uuid', { nullable: true })
+  userId?: string | null;
 
-  @Column("jsonb", { nullable: true, default: null })
-  splitRatio!: Record<string, number> | null;
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'userId' })
+  user?: User | null;
 
-  @Column({ type: "varchar", length: 50, default: "unknown" })
+  @Column({ type: 'varchar', length: 50, default: 'unknown' })
   bankSource!: string;
 
-  @Column({ type: "varchar", length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   bankReference?: string | null;
 
-  @Column("jsonb", { nullable: true })
+  @Column('jsonb', { nullable: true })
   rawData?: Record<string, unknown>;
 
-  @Column("uuid", { nullable: true })
+  @Column('uuid', { nullable: true })
   householdId?: string | null;
 
-  @Column("uuid", { nullable: true })
-  ownerId?: string | null;
-
-  @Column("boolean", { default: false })
+  @Column('boolean', { default: false })
   orphaned!: boolean;
 
-  @Column({ type: "varchar", length: 20, nullable: true })
-  transferType!: "none" | "own_account" | "household_member" | "third_party" | null;
-
-  @Column("uuid", { nullable: true })
-  linkedTransactionId?: string | null;
-
-  @Column({ type: "varchar", length: 255, nullable: true })
-  transferCounterparty?: string | null;
-
-  @Column("uuid", { nullable: true })
+  /**
+   * For transfers: the other user (counterparty). Populated when category
+   * is transfer/to-household-member, transfer/from-household-member,
+   * transfer/to-external-member, or transfer/from-external-member.
+   * Null for own-account transfers (category = transfer/own-account).
+   */
+  @Column('uuid', { nullable: true })
   transferCounterpartyUserId?: string | null;
 
-  @Column("boolean", { default: false })
+  /** Link to matching leg for own-account transfers (transfer/own-account) */
+  @Column('uuid', { nullable: true })
+  linkedTransactionId?: string | null;
+
+  /** User override: exclude from spending analytics (e.g. reimbursement) */
+  @Column('boolean', { default: false })
   isExcludedFromAnalytics!: boolean;
 
-  @Column("boolean", { default: false })
+  /** For third-party transfers: user marked as expense (include in analytics) */
+  @Column('boolean', { default: false })
   countAsExpense!: boolean;
 
   @CreateDateColumn()

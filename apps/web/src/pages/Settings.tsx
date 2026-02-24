@@ -14,8 +14,9 @@ import {
   updateIncome,
   deleteIncome,
   getHouseholdIncomeSummary,
-  getDefaultSplit,
+  getSharedExpenseSplit,
 } from "../api/households";
+import { backfillCounterparties } from "../api/statements";
 import type { User, Income, PerkCard } from "@couple-finance/shared";
 import { getCategories } from "../api/insights";
 import { Settings as SettingsIcon, Users, Wallet, Home, Plus, Trash2, Pencil } from "lucide-react";
@@ -33,24 +34,21 @@ const PRESET_COLORS = [
 
 type Tab = "household" | "users" | "income";
 
-function DefaultSplitSection({
+function SharedExpenseSplitSection({
   householdId,
   users,
-  initialSplit,
   onRefresh,
 }: {
   householdId: string;
   users: User[];
-  initialSplit?: Record<string, number>;
   onRefresh: () => Promise<void>;
 }) {
   const qc = useQueryClient();
-  const { data: computedSplit } = useQuery({
-    queryKey: ["default-split", householdId],
-    queryFn: () => getDefaultSplit(householdId),
-    enabled: users.length > 0 && !initialSplit,
+  const { data: effectiveInitial } = useQuery({
+    queryKey: ["shared-expense-split", householdId],
+    queryFn: () => getSharedExpenseSplit(householdId),
+    enabled: users.length > 0,
   });
-  const effectiveInitial = initialSplit ?? computedSplit;
   const equalShare = 1 / users.length;
   const [shares, setShares] = useState<Record<string, number>>(() => {
     const out: Record<string, number> = {};
@@ -74,23 +72,28 @@ function DefaultSplitSection({
   const isValid = Math.abs(total - 1) < 0.001;
 
   const update = useMutation({
-    mutationFn: () => {
-      const normalized: Record<string, number> = {};
+    mutationFn: async () => {
       const sum = Object.values(shares).reduce((a, b) => a + b, 0);
+      const normalized: Record<string, number> = {};
       for (const [uid, v] of Object.entries(shares)) {
         normalized[uid] = sum > 0 ? v / sum : 1 / users.length;
       }
-      return updateHousehold(householdId, { defaultSplit: normalized });
+      await Promise.all(
+        users.map((u) =>
+          updateUser(householdId, u.id, { expenseShare: normalized[u.id] ?? null })
+        )
+      );
     },
     onSuccess: async () => {
       await onRefresh();
       qc.invalidateQueries({ queryKey: ["households"] });
+      qc.invalidateQueries({ queryKey: ["shared-expense-split", householdId] });
     },
   });
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-      <h3 className="text-sm font-medium text-slate-700 mb-2">Default split (shared expenses)</h3>
+      <h3 className="text-sm font-medium text-slate-700 mb-2">Shared expense split</h3>
       <p className="text-slate-500 text-xs mb-3">
         Used when uploading transactions as &quot;Shared (split by default)&quot;. When no custom
         split is saved, defaults to each person&apos;s net salary / household total. Percentages
@@ -128,7 +131,7 @@ function DefaultSplitSection({
         disabled={!isValid || update.isPending}
         className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {update.isPending ? "Saving..." : "Save default split"}
+        {update.isPending ? "Saving..." : "Save shared expense split"}
       </button>
     </div>
   );
@@ -186,13 +189,51 @@ export function Settings() {
   );
 }
 
+function BackfillCounterpartiesSection({
+  householdId,
+  onRefresh,
+}: {
+  householdId: string;
+  onRefresh: () => Promise<void>;
+}) {
+  const qc = useQueryClient();
+  const backfill = useMutation({
+    mutationFn: () => backfillCounterparties(householdId),
+    onSuccess: async (data) => {
+      await onRefresh();
+      qc.invalidateQueries({ queryKey: ["users", householdId] });
+      qc.invalidateQueries({ queryKey: ["households"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      alert(
+        `Backfill complete: ${data.usersCreated} user(s) created, ${data.transactionsUpdated} transaction(s) updated.`
+      );
+    },
+  });
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+      <h3 className="text-sm font-medium text-slate-700 mb-2">Transfer counterparties</h3>
+      <p className="text-slate-500 text-xs mb-3">
+        Create users from existing third-party transfer transactions. Use this if you uploaded
+        statements before adding household members.
+      </p>
+      <button
+        onClick={() => backfill.mutate()}
+        disabled={backfill.isPending}
+        className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-50"
+      >
+        {backfill.isPending ? "Running..." : "Backfill counterparties"}
+      </button>
+    </div>
+  );
+}
+
 function HouseholdTab({
   household,
   users,
   onClear,
   onRefresh,
 }: {
-  household: { id: string; name: string; defaultSplit?: Record<string, number> | null };
+  household: { id: string; name: string; defaultSavingsTarget?: number | null };
   users: User[];
   onClear: () => void;
   onRefresh: () => Promise<void>;
@@ -200,10 +241,19 @@ function HouseholdTab({
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(household.name);
+  const [defaultSavingsTarget, setDefaultSavingsTarget] = useState(
+    household.defaultSavingsTarget != null ? String(household.defaultSavingsTarget) : ""
+  );
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const update = useMutation({
-    mutationFn: () => updateHousehold(household.id, { name }),
+    mutationFn: () =>
+      updateHousehold(household.id, {
+        name,
+        defaultSavingsTarget: defaultSavingsTarget.trim()
+          ? Number(defaultSavingsTarget)
+          : null,
+      }),
     onSuccess: async () => {
       await onRefresh();
       qc.invalidateQueries({ queryKey: ["households"] });
@@ -237,6 +287,15 @@ function HouseholdTab({
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2"
               required
             />
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              value={defaultSavingsTarget}
+              onChange={(e) => setDefaultSavingsTarget(e.target.value)}
+              className="w-48 rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Default savings target"
+            />
             <button
               type="submit"
               disabled={update.isPending}
@@ -249,6 +308,11 @@ function HouseholdTab({
               onClick={() => {
                 setEditing(false);
                 setName(household.name);
+                setDefaultSavingsTarget(
+                  household.defaultSavingsTarget != null
+                    ? String(household.defaultSavingsTarget)
+                    : ""
+                );
               }}
               className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700"
             >
@@ -258,6 +322,12 @@ function HouseholdTab({
         ) : (
           <div className="flex items-center gap-2">
             <span className="text-slate-800">{household.name}</span>
+            <span className="text-slate-500 text-sm">
+              · Default savings target:{" "}
+              {household.defaultSavingsTarget != null
+                ? `€${Number(household.defaultSavingsTarget).toFixed(2)}`
+                : "not set"}
+            </span>
             <button
               onClick={() => setEditing(true)}
               className="text-slate-500 hover:text-slate-700"
@@ -269,13 +339,14 @@ function HouseholdTab({
       </div>
 
       {users.length > 0 && (
-        <DefaultSplitSection
+        <SharedExpenseSplitSection
           householdId={household.id}
           users={users}
-          initialSplit={household.defaultSplit ?? undefined}
           onRefresh={onRefresh}
         />
       )}
+
+      <BackfillCounterpartiesSection householdId={household.id} onRefresh={onRefresh} />
 
       <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
         <h3 className="text-sm font-medium text-slate-700 mb-2">Switch household</h3>
@@ -347,16 +418,15 @@ function UsersTab({
   const [deleteModal, setDeleteModal] = useState<{ user: User } | null>(null);
 
   const [addNickname, setAddNickname] = useState("");
-  const [addLegalEl, setAddLegalEl] = useState("");
-  const [addLegalEn, setAddLegalEn] = useState("");
+  const [addAliases, setAddAliases] = useState<string[]>([]);
+  const [addAliasInput, setAddAliasInput] = useState("");
   const [addColor, setAddColor] = useState(PRESET_COLORS[0]);
 
   const create = useMutation({
     mutationFn: () =>
       createUser(householdId, {
         nickname: addNickname.trim(),
-        legalNameEl: addLegalEl.trim(),
-        legalNameEn: addLegalEn.trim(),
+        nameAliases: addAliases.filter(Boolean),
         color: addColor,
       }),
     onSuccess: async () => {
@@ -365,8 +435,8 @@ function UsersTab({
       qc.invalidateQueries({ queryKey: ["households"] });
       setShowAddForm(false);
       setAddNickname("");
-      setAddLegalEl("");
-      setAddLegalEn("");
+      setAddAliases([]);
+      setAddAliasInput("");
       setAddColor(PRESET_COLORS[0]);
     },
   });
@@ -416,22 +486,61 @@ function UsersTab({
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Legal name (Greek)</label>
-            <input
-              value={addLegalEl}
-              onChange={(e) => setAddLegalEl(e.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">Legal name (English)</label>
-            <input
-              value={addLegalEn}
-              onChange={(e) => setAddLegalEn(e.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2"
-              required
-            />
+            <label className="block text-sm text-slate-600 mb-1">
+              Name aliases (for transfer matching)
+            </label>
+            <p className="text-xs text-slate-500 mb-2">
+              Add full names as they appear on bank statements (e.g. NIKOS NTASIOPOULOS, Νίκος Ντασιόπουλος)
+            </p>
+            <div className="flex gap-2 mb-2">
+              <input
+                value={addAliasInput}
+                onChange={(e) => setAddAliasInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const v = addAliasInput.trim();
+                    if (v && !addAliases.includes(v)) setAddAliases([...addAliases, v]);
+                    setAddAliasInput("");
+                  }
+                }}
+                placeholder="Add alias..."
+                className="flex-1 rounded border border-slate-300 px-3 py-2"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const v = addAliasInput.trim();
+                  if (v && !addAliases.includes(v)) setAddAliases([...addAliases, v]);
+                  setAddAliasInput("");
+                }}
+                className="px-3 py-2 rounded border border-slate-300 hover:bg-slate-50"
+              >
+                Add
+              </button>
+            </div>
+            {addAliases.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {addAliases.map((a) => (
+                  <span
+                    key={a}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-sm"
+                  >
+                    {a}
+                    <button
+                      type="button"
+                      onClick={() => setAddAliases(addAliases.filter((x) => x !== a))}
+                      className="text-slate-500 hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {addAliases.length === 0 && (
+              <p className="text-xs text-amber-600">At least one alias required</p>
+            )}
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-2">Color</label>
@@ -452,7 +561,7 @@ function UsersTab({
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={create.isPending}
+              disabled={create.isPending || addAliases.length === 0}
               className="px-4 py-2 bg-slate-700 text-white rounded-lg disabled:opacity-50"
             >
               Add
@@ -509,16 +618,15 @@ function UserCard({
 }) {
   const qc = useQueryClient();
   const [nickname, setNickname] = useState(user.nickname);
-  const [legalNameEl, setLegalNameEl] = useState(user.legalNameEl);
-  const [legalNameEn, setLegalNameEn] = useState(user.legalNameEn);
+  const [nameAliases, setNameAliases] = useState<string[]>(user.nameAliases ?? []);
+  const [aliasInput, setAliasInput] = useState("");
   const [color, setColor] = useState(user.color);
 
   const update = useMutation({
     mutationFn: () =>
       updateUser(householdId, user.id, {
         nickname,
-        legalNameEl,
-        legalNameEn,
+        nameAliases,
         color,
       }),
     onSuccess: async () => {
@@ -549,18 +657,53 @@ function UserCard({
               placeholder="Nickname"
               className="w-full rounded border px-2 py-1"
             />
-            <input
-              value={legalNameEl}
-              onChange={(e) => setLegalNameEl(e.target.value)}
-              placeholder="Legal name (Greek)"
-              className="w-full rounded border px-2 py-1"
-            />
-            <input
-              value={legalNameEn}
-              onChange={(e) => setLegalNameEn(e.target.value)}
-              placeholder="Legal name (English)"
-              className="w-full rounded border px-2 py-1"
-            />
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Name aliases</label>
+              <div className="flex gap-2 mb-1">
+                <input
+                  value={aliasInput}
+                  onChange={(e) => setAliasInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const v = aliasInput.trim();
+                      if (v && !nameAliases.includes(v)) setNameAliases([...nameAliases, v]);
+                      setAliasInput("");
+                    }
+                  }}
+                  placeholder="Add alias..."
+                  className="flex-1 rounded border px-2 py-1 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = aliasInput.trim();
+                    if (v && !nameAliases.includes(v)) setNameAliases([...nameAliases, v]);
+                    setAliasInput("");
+                  }}
+                  className="text-xs px-2 py-1 rounded border hover:bg-slate-50"
+                >
+                  Add
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {nameAliases.map((a) => (
+                  <span
+                    key={a}
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-xs"
+                  >
+                    {a}
+                    <button
+                      type="button"
+                      onClick={() => setNameAliases(nameAliases.filter((x) => x !== a))}
+                      className="text-slate-500 hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2 flex-wrap mt-2">
               {PRESET_COLORS.map((c) => (
                 <button
@@ -577,8 +720,8 @@ function UserCard({
             <div className="flex gap-2 mt-2">
               <button
                 type="submit"
-                disabled={update.isPending}
-                className="text-sm px-3 py-1 bg-slate-700 text-white rounded"
+                disabled={update.isPending || nameAliases.length === 0}
+                className="text-sm px-3 py-1 bg-slate-700 text-white rounded disabled:opacity-50"
               >
                 Save
               </button>
@@ -590,8 +733,11 @@ function UserCard({
         ) : (
           <div className="flex-1">
             <p className="font-medium text-slate-800">{user.nickname}</p>
-            <p className="text-sm text-slate-600">{user.legalNameEl}</p>
-            <p className="text-sm text-slate-600">{user.legalNameEn}</p>
+            {(user.nameAliases ?? []).length > 0 && (
+              <p className="text-sm text-slate-600">
+                {(user.nameAliases ?? []).join(" · ")}
+              </p>
+            )}
           </div>
         )}
         {!isEditing && (
@@ -724,7 +870,6 @@ function UserIncomeSection({ householdId, user }: { householdId: string; user: U
   });
   const [showForm, setShowForm] = useState(false);
   const [formNet, setFormNet] = useState("");
-  const [formGross, setFormGross] = useState("");
   const [formFrom, setFormFrom] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formPerkCards, setFormPerkCards] = useState<PerkCard[]>([]);
@@ -739,7 +884,6 @@ function UserIncomeSection({ householdId, user }: { householdId: string; user: U
     mutationFn: () =>
       createIncome(householdId, user.id, {
         netMonthlySalary: parseFloat(formNet) || 0,
-        grossMonthlySalary: formGross ? parseFloat(formGross) : undefined,
         effectiveFrom: formFrom || new Date().toISOString().slice(0, 10),
         notes: formNotes || undefined,
         perkCards: formPerkCards.length > 0 ? formPerkCards : undefined,
@@ -749,7 +893,6 @@ function UserIncomeSection({ householdId, user }: { householdId: string; user: U
       qc.invalidateQueries({ queryKey: ["household-income-summary", householdId] });
       setShowForm(false);
       setFormNet("");
-      setFormGross("");
       setFormFrom("");
       setFormNotes("");
       setFormPerkCards([]);
@@ -822,16 +965,6 @@ function UserIncomeSection({ householdId, user }: { householdId: string; user: U
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Gross monthly (€, optional)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={formGross}
-              onChange={(e) => setFormGross(e.target.value)}
-              className="w-full rounded border px-2 py-1"
-            />
-          </div>
-          <div>
             <label className="block text-sm text-slate-600 mb-1">Effective from</label>
             <input
               type="date"
@@ -893,18 +1026,22 @@ function PerkCardBadges({ perkCards }: { perkCards: PerkCard[] }) {
 
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {perkCards.map((p, i) => (
-        <span
-          key={i}
-          className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600"
-          title={p.categoryId ? `Spent on: ${catMap[p.categoryId] ?? p.categoryId}` : undefined}
-        >
-          {p.name}: €{Number(p.monthlyValue).toFixed(2)}
-          {p.categoryId && (
-            <span className="text-slate-500"> ({catMap[p.categoryId]})</span>
-          )}
-        </span>
-      ))}
+      {perkCards.map((p, i) => {
+        const ids = p.categoryIds ?? ("categoryId" in p && (p as { categoryId?: string }).categoryId ? [(p as { categoryId: string }).categoryId] : []);
+        const catLabels = ids.map((id) => catMap[id] ?? id).join(", ");
+        return (
+          <span
+            key={i}
+            className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600"
+            title={catLabels ? `Spent on: ${catLabels}` : undefined}
+          >
+            {p.name}: €{Number(p.monthlyValue).toFixed(2)}
+            {catLabels && (
+              <span className="text-slate-500"> ({catLabels})</span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -926,10 +1063,10 @@ function PerkCardsEditor({
   const add = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    onChange([...value, { name: "", monthlyValue: 0, categoryId: defaultCategoryId }]);
+    onChange([...value, { name: "", monthlyValue: 0, categoryIds: [defaultCategoryId] }]);
   };
   const remove = (i: number) => onChange(value.filter((_, j) => j !== i));
-  const update = (i: number, field: keyof PerkCard, v: string | number) => {
+  const update = (i: number, field: keyof PerkCard, v: string | number | string[]) => {
     const next = [...value];
     next[i] = { ...next[i], [field]: v };
     onChange(next);
@@ -962,10 +1099,14 @@ function PerkCardsEditor({
                 className="min-w-[120px] flex-1 rounded border px-2 py-1 text-sm"
               />
               <select
-                value={p.categoryId || defaultCategoryId}
-                onChange={(e) => update(i, "categoryId", e.target.value)}
-                className="rounded border px-2 py-1 text-sm bg-white min-w-[140px]"
-                title="Spent on"
+                multiple
+                value={p.categoryIds ?? []}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions, (o) => o.value);
+                  update(i, "categoryIds", selected);
+                }}
+                className="rounded border px-2 py-1 text-sm bg-white min-w-[140px] max-h-24"
+                title="Categories this perk can be used on"
               >
                 {perkCategories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -1011,17 +1152,15 @@ function IncomeRecord({
 }) {
   const [editing, setEditing] = useState(false);
   const [net, setNet] = useState(String(parseFloat(String(income.netMonthlySalary))));
-  const [gross, setGross] = useState(
-    income.grossMonthlySalary != null ? String(income.grossMonthlySalary) : ""
-  );
   const [from, setFrom] = useState(income.effectiveFrom);
   const [to, setTo] = useState(income.effectiveTo ?? "");
   const [notes, setNotes] = useState(income.notes ?? "");
   const [perkCards, setPerkCards] = useState<PerkCard[]>(() =>
     (income.perkCards ?? []).map((p) => ({
+      id: p.id,
       name: p.name,
       monthlyValue: p.monthlyValue,
-      categoryId: "categoryId" in p && p.categoryId ? p.categoryId : "food",
+      categoryIds: p.categoryIds ?? ("categoryId" in p && (p as { categoryId?: string }).categoryId ? [(p as { categoryId: string }).categoryId] : ["food"]),
     }))
   );
 
@@ -1029,7 +1168,6 @@ function IncomeRecord({
     mutationFn: () =>
       updateIncome(householdId, userId, income.id, {
         netMonthlySalary: parseFloat(net) || 0,
-        grossMonthlySalary: gross ? parseFloat(gross) : null,
         effectiveFrom: from,
         effectiveTo: to || null,
         notes: notes || null,
@@ -1062,14 +1200,6 @@ function IncomeRecord({
               value={net}
               onChange={(e) => setNet(e.target.value)}
               placeholder="Net €"
-              className="w-24 rounded border px-2 py-1"
-            />
-            <input
-              type="number"
-              step="0.01"
-              value={gross}
-              onChange={(e) => setGross(e.target.value)}
-              placeholder="Gross €"
               className="w-24 rounded border px-2 py-1"
             />
             <input
