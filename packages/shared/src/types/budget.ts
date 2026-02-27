@@ -55,4 +55,11 @@ export interface BudgetComparison {
   totalPlanned: number;
   totalActual: number;
   totalDifference: number;
+  sharedByUser: Array<{
+    userId: string;
+    nickname: string;
+    plannedShared: number;
+    actualShared: number;
+    difference: number;
+  }>;
 }

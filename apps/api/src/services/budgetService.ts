@@ -4,7 +4,7 @@ import { BudgetItem } from "../entities/BudgetItem";
 import { Household } from "../entities/Household";
 import { User } from "../entities/User";
 import { Transaction } from "../entities/Transaction";
-import { getSharedExpenseSplit } from "./incomeService";
+import { getHouseholdMonthlyIncome, getSharedExpenseSplit } from "./incomeService";
 
 type BudgetItemType = "income" | "expense";
 
@@ -215,12 +215,44 @@ export async function getBudgetSummary(plan: BudgetPlan): Promise<BudgetSummary>
     .find({ where: { householdId: plan.householdId } });
 
   const items = plan.items ?? [];
-  const totalIncome = items
-    .filter((i) => i.type === "income")
-    .reduce((s, i) => s + toNumber(i.amount), 0);
-  const totalExpenses = items
-    .filter((i) => i.type === "expense")
-    .reduce((s, i) => s + toNumber(i.amount), 0);
+  const [yearStr, monthStr] = [plan.month.slice(0, 4), plan.month.slice(5, 7)];
+  const planMonthDate = new Date(Number(yearStr), Number(monthStr) - 1, 1);
+  const householdIncome = await getHouseholdMonthlyIncome(plan.householdId, planMonthDate);
+  const incomeByUser = new Map<string, number>(
+    householdIncome.breakdown.map((b) => [
+      b.userId,
+      b.netMonthlySalary + (b.perkCardsTotal ?? 0),
+    ])
+  );
+
+  // Actual expenses from transactions (per-user + shared) for the plan month
+  const { from, to } = monthRange(plan.month);
+  const expenseRows = await dataSource
+    .getRepository(Transaction)
+    .createQueryBuilder("t")
+    .select(`t."userId"`, "userId")
+    .addSelect(
+      `COALESCE(SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END), 0)`,
+      "expenseActual"
+    )
+    .where(`t."householdId" = :householdId`, { householdId: plan.householdId })
+    .andWhere("t.date >= :from", { from })
+    .andWhere("t.date <= :to", { to })
+    .andWhere(`(t."isExcludedFromAnalytics" = false OR t."isExcludedFromAnalytics" IS NULL)`)
+    .groupBy(`t."userId"`)
+    .getRawMany();
+
+  const personalExpensesByUser = new Map<string, number>();
+  let totalExpenses = 0;
+
+  for (const row of expenseRows) {
+    const userId = row.userId ?? null;
+    const amount = toNumber(row.expenseActual);
+    totalExpenses += amount;
+    if (userId !== null) {
+      personalExpensesByUser.set(userId, amount);
+    }
+  }
 
   const defaultSavingsTarget = household?.defaultSavingsTarget != null
     ? toNumber(household.defaultSavingsTarget)
@@ -229,11 +261,13 @@ export async function getBudgetSummary(plan: BudgetPlan): Promise<BudgetSummary>
     ? toNumber(plan.savingsTarget)
     : defaultSavingsTarget;
 
-  const sharedExpenses = items
-    .filter((i) => i.type === "expense" && i.userId == null)
-    .reduce((s, i) => s + toNumber(i.amount), 0);
   const sharedIncome = items
     .filter((i) => i.type === "income" && i.userId == null)
+    .reduce((s, i) => s + toNumber(i.amount), 0);
+
+  // Planned shared expenses from budget items (shared expense rows)
+  const plannedSharedExpenses = items
+    .filter((i) => i.type === "expense" && i.userId == null)
     .reduce((s, i) => s + toNumber(i.amount), 0);
 
   const split = await getSharedExpenseSplit(plan.householdId);
@@ -241,17 +275,13 @@ export async function getBudgetSummary(plan: BudgetPlan): Promise<BudgetSummary>
 
   const perUser = users.map((u) => {
     const pct = split[u.id] ?? fallbackPct;
-    const personalIncome = items
-      .filter((i) => i.type === "income" && i.userId === u.id)
-      .reduce((s, i) => s + toNumber(i.amount), 0);
-    const personalExpenses = items
-      .filter((i) => i.type === "expense" && i.userId === u.id)
-      .reduce((s, i) => s + toNumber(i.amount), 0);
+    const baseIncome = incomeByUser.get(u.id) ?? 0;
+    const personalExpenses = personalExpensesByUser.get(u.id) ?? 0;
 
     const allocatedSharedIncome = sharedIncome * pct;
-    const sharedExpenseShare = sharedExpenses * pct;
+    const sharedExpenseShare = plannedSharedExpenses * pct;
     const userSavingsTarget = savingsTarget * pct;
-    const income = personalIncome + allocatedSharedIncome;
+    const income = baseIncome + allocatedSharedIncome;
     const freeMoney = income - personalExpenses - sharedExpenseShare - userSavingsTarget;
 
     return {
@@ -268,19 +298,24 @@ export async function getBudgetSummary(plan: BudgetPlan): Promise<BudgetSummary>
 
   return {
     household: {
-      totalIncome: round2(totalIncome),
+      totalIncome: round2(householdIncome.total),
       totalExpenses: round2(totalExpenses),
-      balance: round2(totalIncome - totalExpenses - savingsTarget),
+      balance: round2(householdIncome.total - totalExpenses - savingsTarget),
       savingsTarget: round2(savingsTarget),
     },
     users: perUser,
-    shared: { totalExpenses: round2(sharedExpenses) },
+    shared: { totalExpenses: round2(plannedSharedExpenses) },
   };
 }
 
 export async function getBudgetComparison(plan: BudgetPlan): Promise<BudgetComparison> {
   const items = plan.items ?? [];
   const { from, to } = monthRange(plan.month);
+
+  // Planned shared expenses (shared owner budget items) for the month
+  const plannedSharedTotal = items
+    .filter((i) => i.type === "expense" && i.userId == null)
+    .reduce((s, i) => s + toNumber(i.amount), 0);
 
   const actualRows = await dataSource
     .getRepository(Transaction)
@@ -307,37 +342,91 @@ export async function getBudgetComparison(plan: BudgetPlan): Promise<BudgetCompa
     string,
     { expenseActual: number; incomeActual: number }
   >();
+  let sharedActualTotal = 0;
   for (const row of actualRows) {
+    const isShared = row.userId == null;
+    if (isShared) {
+      sharedActualTotal += toNumber(row.expenseActual);
+    }
     actualMap.set(keyFor(row.userId ?? null, row.categoryId), {
       expenseActual: toNumber(row.expenseActual),
       incomeActual: toNumber(row.incomeActual),
     });
   }
 
-  const resultItems = items.map((item) => {
+  const grouped = new Map<
+    string,
+    {
+      budgetItemId: string;
+      name: string;
+      categoryId: string;
+      userId: string | null;
+      planned: number;
+      actual: number;
+    }
+  >();
+
+  for (const item of items) {
     const key = keyFor(item.userId ?? null, item.categoryId);
     const actual = actualMap.get(key);
     const planned = toNumber(item.amount);
     const actualValue =
       item.type === "expense" ? (actual?.expenseActual ?? 0) : (actual?.incomeActual ?? 0);
-    return {
-      budgetItemId: item.id,
-      name: item.name,
-      categoryId: item.categoryId,
-      userId: item.userId ?? null,
-      planned: round2(planned),
-      actual: round2(actualValue),
-      difference: round2(actualValue - planned),
-    };
-  });
+
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        budgetItemId: item.id,
+        name: item.name,
+        categoryId: item.categoryId,
+        userId: item.userId ?? null,
+        planned,
+        actual: actualValue,
+      });
+    } else {
+      existing.planned += planned;
+      existing.name = `${existing.name}, ${item.name}`;
+    }
+  }
+
+  const resultItems = Array.from(grouped.values()).map((g) => ({
+    budgetItemId: g.budgetItemId,
+    name: g.name,
+    categoryId: g.categoryId,
+    userId: g.userId,
+    planned: round2(g.planned),
+    actual: round2(g.actual),
+    difference: round2(g.planned - g.actual),
+  }));
 
   const totalPlanned = resultItems.reduce((s, i) => s + i.planned, 0);
   const totalActual = resultItems.reduce((s, i) => s + i.actual, 0);
+
+  // Per-user shared actuals: split shared totals using the same shared expense split
+  const users = await dataSource
+    .getRepository(User)
+    .find({ where: { householdId: plan.householdId } });
+  const split = await getSharedExpenseSplit(plan.householdId);
+  const fallbackPct = users.length > 0 ? 1 / users.length : 0;
+
+  const sharedByUser = users.map((u) => {
+    const pct = split[u.id] ?? fallbackPct;
+    const plannedShared = round2(plannedSharedTotal * pct);
+    const actualShared = round2(sharedActualTotal * pct);
+    return {
+      userId: u.id,
+      nickname: u.nickname,
+      plannedShared,
+      actualShared,
+      difference: round2(plannedShared - actualShared),
+    };
+  });
 
   return {
     items: resultItems,
     totalPlanned: round2(totalPlanned),
     totalActual: round2(totalActual),
-    totalDifference: round2(totalActual - totalPlanned),
+    totalDifference: round2(totalPlanned - totalActual),
+    sharedByUser,
   };
 }

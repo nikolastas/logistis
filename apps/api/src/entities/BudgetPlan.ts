@@ -13,6 +13,7 @@ import { BudgetItem } from './BudgetItem';
 
 @Entity('budget_plans')
 export class BudgetPlan {
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column('uuid')

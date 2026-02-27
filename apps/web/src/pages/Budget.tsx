@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BudgetItem, BudgetPlan } from "@couple-finance/shared";
 import { Plus, Trash2, ArrowLeftRight } from "lucide-react";
@@ -46,6 +46,7 @@ export function Budget() {
   const [newPlanSavings, setNewPlanSavings] = useState("");
   const [newPlanNotes, setNewPlanNotes] = useState("");
   const [showComparison, setShowComparison] = useState(false);
+  const [selectedPlanSavingsDraft, setSelectedPlanSavingsDraft] = useState("");
 
   const [draftItem, setDraftItem] = useState<DraftItem>({
     userId: null,
@@ -90,6 +91,16 @@ export function Budget() {
     enabled: !!household && !!selectedPlanId,
   });
 
+  useEffect(() => {
+    if (selectedPlan) {
+      setSelectedPlanSavingsDraft(
+        selectedPlan.savingsTarget != null ? String(selectedPlan.savingsTarget) : ""
+      );
+    } else {
+      setSelectedPlanSavingsDraft("");
+    }
+  }, [selectedPlan?.id, selectedPlan?.savingsTarget]);
+
   const { data: summary } = useQuery({
     queryKey: ["budget-summary", household?.id, selectedPlanId],
     queryFn: () => getBudgetSummary(household!.id, selectedPlanId!),
@@ -106,7 +117,9 @@ export function Budget() {
     mutationFn: () =>
       createBudgetPlan(household!.id, {
         month: newPlanMonth,
-        savingsTarget: newPlanSavings.trim() ? Number(newPlanSavings) : null,
+        savingsTarget: newPlanSavings.trim()
+          ? Number(newPlanSavings.replace(",", "."))
+          : null,
         notes: newPlanNotes.trim() ? newPlanNotes.trim() : null,
       }),
     onSuccess: async (plan) => {
@@ -329,12 +342,16 @@ export function Budget() {
                   type="number"
                   step="0.01"
                   min={0}
-                  value={selectedPlan.savingsTarget ?? ""}
-                  onBlur={(e) =>
+                  value={selectedPlanSavingsDraft}
+                  onChange={(e) => setSelectedPlanSavingsDraft(e.target.value)}
+                  onBlur={(e) => {
+                    const raw = e.target.value.trim();
+                    const normalized = raw.replace(",", ".");
+                    const parsed = normalized ? Number(normalized) : NaN;
                     savePlanMeta.mutate({
-                      savingsTarget: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
+                      savingsTarget: !normalized || Number.isNaN(parsed) ? null : parsed,
+                    });
+                  }}
                   className="w-full rounded border border-slate-300 px-3 py-2"
                 />
               </div>
@@ -372,34 +389,60 @@ export function Budget() {
                 </div>
               </div>
               {summary.users.length > 0 && (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-slate-500 border-b border-slate-200">
-                        <th className="py-2">User</th>
-                        <th className="py-2">PCT</th>
-                        <th className="py-2">Income</th>
-                        <th className="py-2">Personal expenses</th>
-                        <th className="py-2">Shared share</th>
-                        <th className="py-2">Savings</th>
-                        <th className="py-2">Free money</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {summary.users.map((u) => (
-                        <tr key={u.userId} className="border-b border-slate-100">
-                          <td className="py-2">{u.nickname}</td>
-                          <td className="py-2">{(u.pct * 100).toFixed(1)}%</td>
-                          <td className="py-2">{euro(u.income)}</td>
-                          <td className="py-2">{euro(u.personalExpenses)}</td>
-                          <td className="py-2">{euro(u.sharedExpenseShare)}</td>
-                          <td className="py-2">{euro(u.savingsTarget)}</td>
-                          <td className="py-2">{euro(u.freeMoney)}</td>
+                <>
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b border-slate-200">
+                          <th className="py-2">User</th>
+                          <th className="py-2">PCT</th>
+                          <th className="py-2">Income</th>
+                          <th className="py-2">Personal expenses</th>
+                          <th className="py-2">Shared expenses share</th>
+                          <th className="py-2">Savings share</th>
+                          <th className="py-2">Free money</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {summary.users.map((u) => (
+                          <tr key={u.userId} className="border-b border-slate-100">
+                            <td className="py-2">{u.nickname}</td>
+                            <td className="py-2">{(u.pct * 100).toFixed(1)}%</td>
+                            <td className="py-2">{euro(u.income)}</td>
+                            <td className="py-2">{euro(u.personalExpenses)}</td>
+                            <td className="py-2">{euro(u.sharedExpenseShare)}</td>
+                            <td className="py-2">{euro(u.savingsTarget)}</td>
+                            <td className="py-2">{euro(u.freeMoney)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 overflow-x-auto">
+                    <h4 className="text-sm font-medium text-slate-700 mb-1">
+                      Shared account contributions
+                    </h4>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b border-slate-200">
+                          <th className="py-2">User</th>
+                          <th className="py-2">To shared expense account</th>
+                          <th className="py-2">To shared savings account</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summary.users.map((u) => (
+                          <tr key={u.userId} className="border-b border-slate-100">
+                            <td className="py-2">{u.nickname}</td>
+                            <td className="py-2">{euro(u.sharedExpenseShare)}</td>
+                            <td className="py-2">{euro(u.savingsTarget)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -585,48 +628,83 @@ export function Budget() {
       {selectedPlan && showComparison && comparison && (
         <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
           <h3 className="font-medium text-slate-800 mb-3">Planned vs Actual ({selectedPlan.month})</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200">
-                  <th className="py-2">Owner</th>
-                  <th className="py-2">Item</th>
-                  <th className="py-2">Category</th>
-                  <th className="py-2">Planned</th>
-                  <th className="py-2">Actual</th>
-                  <th className="py-2">Diff</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparison.items.map((i) => {
-                  const isOver = i.difference > 0;
-                  return (
-                    <tr key={i.budgetItemId} className="border-b border-slate-100">
-                      <td className="py-2">{itemOwnerLabel(i.userId, userMap)}</td>
-                      <td className="py-2">{i.name}</td>
-                      <td className="py-2">{categoryMap[i.categoryId] ?? i.categoryId}</td>
-                      <td className="py-2">{euro(i.planned)}</td>
-                      <td className="py-2">{euro(i.actual)}</td>
-                      <td className={`py-2 ${isOver ? "text-red-600" : "text-emerald-600"}`}>
-                        {euro(i.difference)}
-                      </td>
+          <div className="space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200">
+                    <th className="py-2">Owner</th>
+                    <th className="py-2">Item</th>
+                    <th className="py-2">Category</th>
+                    <th className="py-2">Planned</th>
+                    <th className="py-2">Actual</th>
+                    <th className="py-2">Diff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparison.items.map((i) => {
+                    const isPositive = i.difference > 0;
+                    return (
+                      <tr key={i.budgetItemId} className="border-b border-slate-100">
+                        <td className="py-2">{itemOwnerLabel(i.userId, userMap)}</td>
+                        <td className="py-2">{i.name}</td>
+                        <td className="py-2">{categoryMap[i.categoryId] ?? i.categoryId}</td>
+                        <td className="py-2">{euro(i.planned)}</td>
+                        <td className="py-2">{euro(i.actual)}</td>
+                        <td className={`py-2 ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
+                          {euro(i.difference)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="font-medium">
+                    <td className="py-2" colSpan={3}>
+                      Totals
+                    </td>
+                    <td className="py-2">{euro(comparison.totalPlanned)}</td>
+                    <td className="py-2">{euro(comparison.totalActual)}</td>
+                    <td className={comparison.totalDifference > 0 ? "text-emerald-600" : "text-red-600"}>
+                      {euro(comparison.totalDifference)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {comparison.sharedByUser && comparison.sharedByUser.length > 0 && (
+              <div className="overflow-x-auto">
+                <h4 className="text-sm font-medium text-slate-700 mb-1">
+                  Shared expenses (planned vs actual per user)
+                </h4>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200">
+                      <th className="py-2">User</th>
+                      <th className="py-2">Planned shared</th>
+                      <th className="py-2">Actual shared</th>
+                      <th className="py-2">Diff</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="font-medium">
-                  <td className="py-2" colSpan={3}>
-                    Totals
-                  </td>
-                  <td className="py-2">{euro(comparison.totalPlanned)}</td>
-                  <td className="py-2">{euro(comparison.totalActual)}</td>
-                  <td className={comparison.totalDifference > 0 ? "text-red-600" : "text-emerald-600"}>
-                    {euro(comparison.totalDifference)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                  </thead>
+                  <tbody>
+                    {comparison.sharedByUser.map((u) => {
+                      const isPositive = u.difference > 0;
+                      return (
+                        <tr key={u.userId} className="border-b border-slate-100">
+                          <td className="py-2">{u.nickname}</td>
+                          <td className="py-2">{euro(u.plannedShared)}</td>
+                          <td className="py-2">{euro(u.actualShared)}</td>
+                          <td className={`py-2 ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
+                            {euro(u.difference)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
