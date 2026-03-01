@@ -116,7 +116,7 @@ export function Dashboard() {
 
   const selectedMonth = useMemo(
     () => `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}`,
-    [selectedYear, selectedMonthNum]
+    [selectedYear, selectedMonthNum],
   );
 
   const scopeUserId = useMemo(() => {
@@ -173,8 +173,8 @@ export function Dashboard() {
     const cats = new Set<string>();
 
     for (const r of monthCategoryData as SpendingByMonthCategory[]) {
-      const val = Math.abs(r.total);
-      if (val <= 0) continue;
+      const val = r.total;
+      // if (val <= 0) continue;
       const key = r.categoryName ?? r.categoryId;
       cats.add(key);
       let row = byMonth.get(r.month);
@@ -185,12 +185,19 @@ export function Dashboard() {
       const prev = typeof row[key] === 'number' ? row[key] : 0;
       row[key] = prev + val;
     }
+    // set absolute values after aggregation for each month
+    for (const [_, row] of byMonth.entries()) {
+      for (const [k, v] of Object.entries(row)) {
+        if (k !== 'month') row[k] = Math.abs(Number(v));
+      }
+    }
 
     const now = new Date();
     const isCurrentYear = selectedYear === now.getFullYear();
     const monthCount = isCurrentYear ? now.getMonth() + 1 : 12;
-    const allMonths = Array.from({ length: monthCount }, (_, i) =>
-      `${selectedYear}-${String(i + 1).padStart(2, '0')}`
+    const allMonths = Array.from(
+      { length: monthCount },
+      (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`,
     );
     const data = allMonths.map((month) => {
       const row = byMonth.get(month);
@@ -210,13 +217,18 @@ export function Dashboard() {
   const monthlyTrendsPadded = useMemo(() => {
     const byMonth = new Map<string, number>();
     for (const r of monthCategoryData as SpendingByMonthCategory[]) {
-      const val = Math.abs(r.total);
-      if (val <= 0) continue;
+      const val = r.total;
+      // if (val <= 0) continue;
       byMonth.set(r.month, (byMonth.get(r.month) ?? 0) + val);
     }
+    // set absolute values
+    byMonth.forEach((val, month) => {
+      byMonth.set(month, Math.abs(val));
+    });
     const year = selectedYear;
-    const allMonths = Array.from({ length: 12 }, (_, i) =>
-      `${year}-${String(i + 1).padStart(2, '0')}`
+    const allMonths = Array.from(
+      { length: 12 },
+      (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`,
     );
     const monthToTotal = new Map(Array.from(byMonth.entries()));
     return allMonths.map((month) => ({
@@ -268,7 +280,14 @@ export function Dashboard() {
 
   if (!data) return null;
 
-  const totalSpend = data.byCategory.reduce((s, c) => s + Math.abs(c.total), 0);
+  const scopedOwnerTotal =
+    scopeUserId && scopeUserId !== '__shared__'
+      ? data.byOwner.find((o) => o.userId === scopeUserId)?.total
+      : undefined;
+  const totalSpend =
+    scopedOwnerTotal != null
+      ? Math.abs(scopedOwnerTotal)
+      : data.byCategory.reduce((s, c) => s + Math.abs(c.total), 0);
   const totalTx = data.totalTransactions ?? 0;
   const pieData = data.byCategory
     .filter((c) => c.total < 0)
@@ -304,7 +323,7 @@ export function Dashboard() {
         label: 'Spent',
         data: monthlyTrendsPadded.map((m) => m.total),
         backgroundColor: monthlyTrendsPadded.map((_, i) =>
-          monthlyTrendsPadded[i].total > 0 ? '#3b82f6' : '#e2e8f0'
+          monthlyTrendsPadded[i].total > 0 ? '#3b82f6' : '#e2e8f0',
         ),
         borderRadius: 4,
       },
@@ -353,8 +372,7 @@ export function Dashboard() {
       },
       tooltip: {
         callbacks: {
-          title: (items: { label?: string }[]) =>
-            items.length > 0 ? items[0].label ?? '' : '',
+          title: (items: { label?: string }[]) => (items.length > 0 ? (items[0].label ?? '') : ''),
           label: (ctx: {
             raw: unknown;
             dataIndex: number;
@@ -363,7 +381,7 @@ export function Dashboard() {
           }) => {
             const total = ctx.chart.data.datasets.reduce(
               (s, ds) => s + (Number(ds.data[ctx.dataIndex]) ?? 0),
-              0
+              0,
             );
             const pct = total > 0 ? ((Number(ctx.raw) ?? 0) / total) * 100 : 0;
             return `${ctx.dataset.label ?? ''}: ${formatEur(Number(ctx.raw))} (${pct.toFixed(1)}%)`;

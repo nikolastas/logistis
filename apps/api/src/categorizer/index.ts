@@ -1,6 +1,6 @@
-import Fuse from "fuse.js";
-import OpenAI from "openai";
-import categoriesData from "./categories.json";
+import Fuse from 'fuse.js';
+import OpenAI from 'openai';
+import categoriesData from './categories.json';
 
 const categories = categoriesData.categories as Array<{
   id: string;
@@ -9,35 +9,32 @@ const categories = categoriesData.categories as Array<{
   excludeFromSpending?: boolean;
 }>;
 
-const UNCATEGORIZED_ID = "uncategorized";
+const UNCATEGORIZED_ID = 'uncategorized';
 
 function normalize(str: string): string {
   return str
     .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ");
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ');
 }
 
 const categorizableCategories = categories.filter(
-  (c) => c.id !== UNCATEGORIZED_ID && !c.id.startsWith("transfer/")
+  (c) => c.id !== UNCATEGORIZED_ID && !c.id.startsWith('transfer/'),
 );
 
-const fuse = new Fuse(
-  categorizableCategories,
-  {
-    keys: ["name", "keywords"],
-    includeScore: true,
-    threshold: 0.4,
-    getFn: (obj, path) => {
-      const key = Array.isArray(path) ? path[0] : path;
-      if (key === "keywords") {
-        return (obj.keywords || []).join(" ");
-      }
-      return (obj as Record<string, unknown>)[key] as string;
-    },
-  }
-);
+const fuse = new Fuse(categorizableCategories, {
+  keys: ['name', 'keywords'],
+  includeScore: true,
+  threshold: 0.4,
+  getFn: (obj, path) => {
+    const key = Array.isArray(path) ? path[0] : path;
+    if (key === 'keywords') {
+      return (obj.keywords || []).join(' ');
+    }
+    return (obj as Record<string, unknown>)[key] as string;
+  },
+});
 
 function keywordMatch(description: string): string | null {
   const norm = normalize(description);
@@ -66,20 +63,18 @@ async function openaiMatch(description: string): Promise<string | null> {
   if (!key) return null;
 
   const openai = new OpenAI({ apiKey: key });
-  const catList = categorizableCategories
-    .map((c) => `${c.id}: ${c.name}`)
-    .join(", ");
+  const catList = categorizableCategories.map((c) => `${c.id}: ${c.name}`).join(', ');
 
   try {
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: 'gpt-4o-mini',
       messages: [
         {
-          role: "system",
+          role: 'system',
           content: `You categorize bank transactions. Reply with ONLY the category id from this list: ${catList}. If unsure, reply "uncategorized".`,
         },
         {
-          role: "user",
+          role: 'user',
           content: `Transaction: "${description}"`,
         },
       ],
@@ -117,25 +112,26 @@ export function getCategoryById(id: string): (typeof categories)[0] | undefined 
 
 export function isExcludedFromSpending(categoryId: string): boolean {
   const cat = categories.find((c) => c.id === categoryId);
-  if (cat && "excludeFromSpending" in cat && cat.excludeFromSpending) return true;
-  if (categoryId.startsWith("transfer/")) return true;
+  if (cat && 'excludeFromSpending' in cat && cat.excludeFromSpending) return true;
+  if (categoryId.startsWith('transfer/')) return true;
+  if (categoryId === 'income') return true;
   return false;
 }
 
-export type TransferType = "none" | "own_account" | "household_member" | "third_party";
+export type TransferType = 'none' | 'own_account' | 'household_member' | 'third_party';
 
 /** Derive transfer type from categoryId (e.g. transfer/own-account → own_account) */
 export function getTransferTypeFromCategory(categoryId: string): TransferType | null {
-  if (!categoryId?.startsWith("transfer/")) return null;
-  const suffix = categoryId.replace("transfer/", "");
+  if (!categoryId?.startsWith('transfer/')) return null;
+  const suffix = categoryId.replace('transfer/', '');
   const map: Record<string, TransferType> = {
-    "own-account": "own_account",
-    "to-household-member": "household_member",
-    "from-household-member": "household_member",
-    "to-external-member": "third_party",
-    "from-external-member": "third_party",
-    "to-third-party": "third_party",
-    "from-third-party": "third_party",
+    'own-account': 'own_account',
+    'to-household-member': 'household_member',
+    'from-household-member': 'household_member',
+    'to-external-member': 'third_party',
+    'from-external-member': 'third_party',
+    'to-third-party': 'third_party',
+    'from-third-party': 'third_party',
   };
   return map[suffix] ?? null;
 }

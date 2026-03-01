@@ -225,21 +225,23 @@ export async function getBudgetSummary(plan: BudgetPlan): Promise<BudgetSummary>
     ])
   );
 
-  // Actual expenses from transactions (per-user + shared) for the plan month
+  // Actual expenses from transactions (per-user + shared) for the plan month; net per category (refunds cancel in same category)
   const { from, to } = monthRange(plan.month);
   const expenseRows = await dataSource
     .getRepository(Transaction)
     .createQueryBuilder("t")
     .select(`t."userId"`, "userId")
-    .addSelect(
-      `COALESCE(SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END), 0)`,
-      "expenseActual"
-    )
+    .addSelect(`t."categoryId"`, "categoryId")
+    .addSelect("COALESCE(SUM(t.amount), 0)", "netAmount")
     .where(`t."householdId" = :householdId`, { householdId: plan.householdId })
     .andWhere("t.date >= :from", { from })
     .andWhere("t.date <= :to", { to })
     .andWhere(`(t."isExcludedFromAnalytics" = false OR t."isExcludedFromAnalytics" IS NULL)`)
+    .andWhere(
+      "(t.\"categoryId\" NOT LIKE 'transfer/%' OR (t.\"categoryId\" IN ('transfer/to-third-party','transfer/from-third-party') AND t.\"countAsExpense\" = true))"
+    )
     .groupBy(`t."userId"`)
+    .addGroupBy(`t."categoryId"`)
     .getRawMany();
 
   const personalExpensesByUser = new Map<string, number>();
@@ -247,10 +249,12 @@ export async function getBudgetSummary(plan: BudgetPlan): Promise<BudgetSummary>
 
   for (const row of expenseRows) {
     const userId = row.userId ?? null;
-    const amount = toNumber(row.expenseActual);
-    totalExpenses += amount;
+    const net = toNumber(row.netAmount);
+    const spent = net < 0 ? -net : 0;
+    totalExpenses += spent;
     if (userId !== null) {
-      personalExpensesByUser.set(userId, amount);
+      const prev = personalExpensesByUser.get(userId) ?? 0;
+      personalExpensesByUser.set(userId, prev + spent);
     }
   }
 
@@ -322,14 +326,7 @@ export async function getBudgetComparison(plan: BudgetPlan): Promise<BudgetCompa
     .createQueryBuilder("t")
     .select(`t."userId"`, "userId")
     .addSelect(`t."categoryId"`, "categoryId")
-    .addSelect(
-      `COALESCE(SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END), 0)`,
-      "expenseActual"
-    )
-    .addSelect(
-      `COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0)`,
-      "incomeActual"
-    )
+    .addSelect("COALESCE(SUM(t.amount), 0)", "netAmount")
     .where(`t."householdId" = :householdId`, { householdId: plan.householdId })
     .andWhere("t.date >= :from", { from })
     .andWhere("t.date <= :to", { to })
@@ -344,13 +341,16 @@ export async function getBudgetComparison(plan: BudgetPlan): Promise<BudgetCompa
   >();
   let sharedActualTotal = 0;
   for (const row of actualRows) {
+    const net = toNumber(row.netAmount);
+    const expenseActual = net < 0 ? -net : 0;
+    const incomeActual = net > 0 ? net : 0;
     const isShared = row.userId == null;
     if (isShared) {
-      sharedActualTotal += toNumber(row.expenseActual);
+      sharedActualTotal += expenseActual;
     }
     actualMap.set(keyFor(row.userId ?? null, row.categoryId), {
-      expenseActual: toNumber(row.expenseActual),
-      incomeActual: toNumber(row.incomeActual),
+      expenseActual,
+      incomeActual,
     });
   }
 
