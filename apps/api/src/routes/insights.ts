@@ -79,7 +79,6 @@ insightsRouter.get('/spending-by-month-category', async (req, res) => {
     }
 
     const rows = await getSpendingByMonthAndCategory(y, householdId || undefined, userId);
-    console.log('rows: ', rows);
     const withNames = rows.map((r) => ({
       ...r,
       categoryName: getCategoryById(r.categoryId)?.name ?? r.categoryId,
