@@ -1,3 +1,4 @@
+import { isJointHouseholdCounterparty } from "./jointAccountCounterparty";
 import { IsNull } from "typeorm";
 import type { User } from "../entities/User";
 import { Transaction } from "../entities/Transaction";
@@ -110,6 +111,15 @@ function resolveTransferByCounterparty(
       transferCounterpartyUserId: null,
       isExcludedFromAnalytics: false,
       categoryId: amount < 0 ? "transfer/to-third-party" : "transfer/from-third-party",
+    };
+  }
+  if (isJointHouseholdCounterparty(counterparty, users)) {
+    return {
+      transferType: "own_account",
+      transferCounterparty: counterparty,
+      transferCounterpartyUserId: null,
+      isExcludedFromAnalytics: true,
+      categoryId: "transfer/own-account",
     };
   }
   const match = matchUserByAlias(counterparty, users);
