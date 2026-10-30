@@ -22,7 +22,7 @@ export const apiClient = {
   patch: <T>(path: string, body: unknown) =>
     api<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (path: string, body?: unknown) =>
-    api<void>(path, { method: "DELETE", ...(body && { body: JSON.stringify(body) }) }),
+    api<void>(path, { method: "DELETE", ...(body != null ? { body: JSON.stringify(body) } : {}) }),
   deleteWithResponse: <T>(path: string, body?: unknown) =>
-    api<T>(path, { method: "DELETE", ...(body && { body: JSON.stringify(body) }) }),
+    api<T>(path, { method: "DELETE", ...(body != null ? { body: JSON.stringify(body) } : {}) }),
 };

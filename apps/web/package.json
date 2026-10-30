@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:review": "node --test tests/reviewTransactions.test.mjs"
   },
   "dependencies": {
     "@couple-finance/shared": "workspace:*",
