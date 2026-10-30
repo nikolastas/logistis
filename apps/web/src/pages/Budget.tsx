@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BudgetItem, BudgetPlan } from "@couple-finance/shared";
 import { Plus, Trash2, ArrowLeftRight } from "lucide-react";
 import { useHousehold } from "../context/HouseholdContext";
+import { useSearchParams } from "react-router-dom";
+import { isBudgetMonth } from "../lib/budgetMonths";
 import {
   createBudgetItem,
   createBudgetPlan,
@@ -41,8 +43,13 @@ function itemOwnerLabel(userId: string | null, userMap: Record<string, string>):
 export function Budget() {
   const qc = useQueryClient();
   const { household, users } = useHousehold();
+  const [searchParams] = useSearchParams();
+  const monthParameter = searchParams.get("month");
+  const requestedMonth = isBudgetMonth(monthParameter) ? monthParameter : null;
+  const appliedMonthRequest = useRef("");
+
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-  const [newPlanMonth, setNewPlanMonth] = useState(toMonthInput());
+  const [newPlanMonth, setNewPlanMonth] = useState(requestedMonth ?? toMonthInput());
   const [newPlanSavings, setNewPlanSavings] = useState("");
   const [newPlanNotes, setNewPlanNotes] = useState("");
   const [showComparison, setShowComparison] = useState(false);
@@ -84,6 +91,19 @@ export function Budget() {
     queryFn: () => listBudgetPlans(household!.id),
     enabled: !!household,
   });
+
+  useEffect(() => {
+    if (!requestedMonth) {
+      appliedMonthRequest.current = "";
+      return;
+    }
+    if (!household || plansLoading) return;
+    const requestKey = `${household.id}:${requestedMonth}`;
+    if (appliedMonthRequest.current === requestKey) return;
+    appliedMonthRequest.current = requestKey;
+    setNewPlanMonth(requestedMonth);
+    setSelectedPlanId(plans.find((plan) => plan.month === requestedMonth)?.id ?? null);
+  }, [requestedMonth, plans, plansLoading, household?.id]);
 
   const { data: selectedPlan } = useQuery({
     queryKey: ["budget-plan", household?.id, selectedPlanId],
