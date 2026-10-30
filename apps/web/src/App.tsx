@@ -7,6 +7,9 @@ import { Goals } from "./pages/Goals";
 import { Settings } from "./pages/Settings";
 import { Budget } from "./pages/Budget";
 import { BudgetNow } from "./pages/BudgetNow";
+import { Savings } from "./pages/Savings";
+import { Accounts } from "./pages/Accounts";
+import { SpendingForecast } from "./pages/SpendingForecast";
 
 function Nav() {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -15,7 +18,7 @@ function Nav() {
     }`;
 
   return (
-    <nav className="flex gap-2 border-b border-slate-200 bg-white px-4 py-3">
+    <nav className="flex flex-wrap gap-2 border-b border-slate-200 bg-white px-4 py-3">
       <NavLink to="/" end className={linkClass}>
         Dashboard
       </NavLink>
@@ -25,12 +28,15 @@ function Nav() {
       <NavLink to="/review" className={linkClass}>
         Review
       </NavLink>
+      <NavLink to="/savings" className={linkClass}>Savings</NavLink>
+      <NavLink to="/accounts" className={linkClass}>Accounts</NavLink>
       <NavLink to="/goals" className={linkClass}>
         Goals
       </NavLink>
       <NavLink to="/budget" end className={linkClass}>
         Budget
       </NavLink>
+      <NavLink to="/budget/forecast" className={linkClass}>Forecast</NavLink>
       <NavLink to="/budget/review/now" className={linkClass}>
         Pay now
       </NavLink>
@@ -54,6 +60,9 @@ export default function App() {
           <Route path="/goals" element={<Goals />} />
           <Route path="/budget" element={<Budget />} />
           <Route path="/budget/review/now" element={<BudgetNow />} />
+          <Route path="/savings" element={<Savings />} />
+          <Route path="/accounts" element={<Accounts />} />
+          <Route path="/budget/forecast" element={<SpendingForecast />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
